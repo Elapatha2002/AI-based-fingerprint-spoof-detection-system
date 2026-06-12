@@ -1,0 +1,196 @@
+"""Screen 2 — Analyze (single + batch zip upload)."""
+import streamlit as st
+from components.cards import page_title, banner
+from utils.image_loader import load_image, is_supported
+from utils.zip_handler import inspect_zip
+from state import auto_case_id
+
+
+SENSORS = [
+    "Biometrika 400B",
+    "CrossMatch 300",
+    "Digital Persona U.are.U",
+    "Other",
+    "Unknown",
+]
+
+
+def render():
+    page_title("Analyze Fingerprint",
+               "Upload a single image or a zip archive for batch analysis.")
+
+    tab_single, tab_batch = st.tabs(["Single Image", "Batch (.zip)"])
+
+    with tab_single:
+        _render_single_tab()
+
+    with tab_batch:
+        _render_batch_tab()
+
+
+def _render_meta_form(key_prefix: str):
+    """Shared case metadata form. Returns dict of values."""
+    if not st.session_state.get("form_case_id"):
+        st.session_state.form_case_id = auto_case_id()
+
+    case_id = st.text_input(
+        "Case ID *",
+        value=st.session_state.form_case_id,
+        key=f"{key_prefix}_case_id",
+        help="Format: CASE-YYYY-####",
+    )
+    examiner = st.text_input(
+        "Examiner *",
+        value=st.session_state.form_examiner,
+        key=f"{key_prefix}_examiner",
+        placeholder="P. Elapatha",
+    )
+    sensor = st.selectbox(
+        "Sensor",
+        SENSORS,
+        index=SENSORS.index(st.session_state.form_sensor)
+        if st.session_state.form_sensor in SENSORS else 0,
+        key=f"{key_prefix}_sensor",
+    )
+    notes = st.text_area(
+        "Notes (optional)",
+        value=st.session_state.form_notes,
+        key=f"{key_prefix}_notes",
+        max_chars=500,
+        height=100,
+    )
+
+    return {
+        "case_id": case_id.strip(),
+        "examiner": examiner.strip(),
+        "sensor": sensor,
+        "notes": notes.strip(),
+    }
+
+
+def _render_single_tab():
+    cols = st.columns([1.4, 1])
+
+    with cols[0]:
+        st.markdown(
+            "<div class='fsd-section-h'>Upload</div>",
+            unsafe_allow_html=True,
+        )
+        uploaded = st.file_uploader(
+            "Drop image or click to browse",
+            type=["png", "jpg", "jpeg", "bmp", "tif", "tiff"],
+            accept_multiple_files=False,
+            key="single_uploader",
+            label_visibility="collapsed",
+        )
+        st.markdown(
+            "<div class='fsd-mono' style='margin-top:8px;'>"
+            "Accepted: .png .jpg .jpeg .bmp .tif .tiff &nbsp;·&nbsp; Max 10 MB</div>",
+            unsafe_allow_html=True,
+        )
+
+        if uploaded is not None:
+            uploaded.seek(0)
+            img, err = load_image(uploaded)
+            if err:
+                banner(err, kind="error")
+                return
+            uploaded.seek(0)
+            st.image(img, caption=f"{uploaded.name} · {img.size[0]}×{img.size[1]} px",
+                     width=320)
+
+    with cols[1]:
+        st.markdown(
+            "<div class='fsd-section-h'>Case Metadata</div>",
+            unsafe_allow_html=True,
+        )
+        meta = _render_meta_form("single")
+
+        st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+        ready = uploaded is not None and meta["case_id"] and meta["examiner"]
+
+        if st.button("▶  Start Analysis",
+                     type="primary",
+                     disabled=not ready,
+                     use_container_width=True,
+                     key="single_start"):
+            uploaded.seek(0)
+            st.session_state.current_single = {
+                "filename": uploaded.name,
+                "image_bytes": uploaded.read(),
+                "meta": meta,
+            }
+            st.session_state.current_page = "single_result"
+            st.rerun()
+
+
+def _render_batch_tab():
+    cols = st.columns([1.4, 1])
+
+    with cols[0]:
+        st.markdown(
+            "<div class='fsd-section-h'>Upload Zip</div>",
+            unsafe_allow_html=True,
+        )
+        uploaded = st.file_uploader(
+            "Drop zip archive or click to browse",
+            type=["zip"],
+            accept_multiple_files=False,
+            key="batch_uploader",
+            label_visibility="collapsed",
+        )
+        st.markdown(
+            "<div class='fsd-mono' style='margin-top:8px;'>"
+            "Zip should contain .png/.jpg/.bmp/.tif images. Subfolders OK. "
+            "Max 50 MB total.</div>",
+            unsafe_allow_html=True,
+        )
+
+        summary = None
+        if uploaded is not None:
+            summary = inspect_zip(uploaded)
+            if summary["errors"]:
+                for e in summary["errors"]:
+                    banner(e, kind="error")
+            elif summary["valid"] == 0:
+                banner("No supported images found in this zip.", kind="warn")
+            else:
+                msg = (
+                    f"<b>{uploaded.name}</b> &nbsp;·&nbsp; "
+                    f"{summary['valid']} images "
+                )
+                if summary["ignored"]:
+                    msg += f"<span class='fsd-pill muted'>{summary['ignored']} ignored</span>"
+                banner(msg, kind="info")
+
+    with cols[1]:
+        st.markdown(
+            "<div class='fsd-section-h'>Case Metadata</div>",
+            unsafe_allow_html=True,
+        )
+        meta = _render_meta_form("batch")
+        st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+
+        valid_count = summary["valid"] if summary else 0
+        ready = (uploaded is not None
+                 and valid_count > 0
+                 and meta["case_id"]
+                 and meta["examiner"])
+
+        btn_label = (f"▶  Start Analysis ({valid_count})"
+                     if valid_count else "▶  Start Analysis")
+
+        if st.button(btn_label,
+                     type="primary",
+                     disabled=not ready,
+                     use_container_width=True,
+                     key="batch_start"):
+            st.session_state.current_batch = {
+                "files": summary["files"],
+                "ignored": summary["ignored"],
+                "meta": meta,
+                "results": [],
+                "started_at": None,
+            }
+            st.session_state.current_page = "processing"
+            st.rerun()
