@@ -25,7 +25,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from src import config as C
 from src.data.dataset import make_dataloaders
-from src.models.resnet import build_resnet50, count_parameters
+from src.models.factory import get_model, count_parameters, MODEL_REGISTRY
 from src.evaluation.metrics import all_metrics, format_metrics
 
 
@@ -81,16 +81,21 @@ def run_epoch(model, loader, criterion, optimizer, device, is_train: bool,
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--model", type=str, default="resnet50",
+                        choices=list(MODEL_REGISTRY.keys()),
+                        help="Backbone: resnet50 (baseline) or resnet50_cbam.")
     parser.add_argument("--quick", action="store_true",
                         help="Tiny subset, 2 epochs — sanity check only.")
     parser.add_argument("--epochs", type=int, default=C.EPOCHS)
     parser.add_argument("--lr", type=float, default=C.LEARNING_RATE)
     parser.add_argument("--batch", type=int, default=C.BATCH_SIZE)
     parser.add_argument("--freeze", action="store_true",
-                        help="Freeze backbone; train head only.")
-    parser.add_argument("--tag", type=str, default="resnet50",
-                        help="Checkpoint tag.")
+                        help="Freeze backbone; train head (+ CBAM if present).")
+    parser.add_argument("--tag", type=str, default=None,
+                        help="Checkpoint tag. Defaults to --model value.")
     args = parser.parse_args()
+    if args.tag is None:
+        args.tag = args.model
 
     set_seed(C.SEED)
     device = torch.device(C.device_str())
@@ -110,8 +115,10 @@ def main():
           f"val batches: {len(val_loader)}  "
           f"test batches: {len(test_loader)}")
 
-    print("Building model ...")
-    model = build_resnet50(pretrained=True, freeze_backbone=args.freeze).to(device)
+    print(f"Building model: {args.model} ...")
+    model = get_model(args.model,
+                      pretrained=True,
+                      freeze_backbone=args.freeze).to(device)
     total_p, train_p = count_parameters(model)
     print(f"  parameters: total={total_p/1e6:.1f}M  trainable={train_p/1e6:.1f}M")
 
