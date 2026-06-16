@@ -13,6 +13,7 @@ import torch.nn as nn
 
 from src.models.resnet import build_resnet50
 from src.models.resnet_cbam import build_resnet50_cbam
+from src.models.mobilenet import build_mobilenetv3
 
 
 def _resnet50(**kw):
@@ -31,9 +32,27 @@ def _resnet50_cbam(**kw):
     )
 
 
+def _mobilenetv3_large(**kw):
+    return build_mobilenetv3(
+        pretrained=kw.get("pretrained", True),
+        freeze_backbone=kw.get("freeze_backbone", False),
+        size="large",
+    )
+
+
+def _mobilenetv3_small(**kw):
+    return build_mobilenetv3(
+        pretrained=kw.get("pretrained", True),
+        freeze_backbone=kw.get("freeze_backbone", False),
+        size="small",
+    )
+
+
 MODEL_REGISTRY = {
     "resnet50": _resnet50,
     "resnet50_cbam": _resnet50_cbam,
+    "mobilenetv3_large": _mobilenetv3_large,
+    "mobilenetv3_small": _mobilenetv3_small,
 }
 
 

@@ -30,29 +30,53 @@ from src import config as C
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
 
-# Filename forms:
-#   live  : {year}_{sensor}_{original}.{ext}
-#   spoof : {year}_{sensor}_{material}_{original}.{ext}
-NAME_RE = re.compile(
-    r"^(?P<year>\d{4})_(?P<sensor>[A-Za-z0-9]+)_(?P<rest>.+)$"
+# Known LivDet sensor names. Longest first so 'DigitalPersona' wins over 'Digital'.
+KNOWN_SENSORS = sorted(
+    [
+        "Biometrika", "CrossMatch", "Italdata", "Sagem", "Swipe",
+        "DigitalPersona", "Digital_Persona", "HiScan", "Hi_Scan",
+        "GreenBit", "Green_Bit", "Atmel", "Identix", "TimeReader",
+        "Precise", "PreciseSensor",
+    ],
+    key=len, reverse=True,
 )
+
+YEAR_RE = re.compile(r"^(?P<year>\d{4})_(?P<rest>.+)$")
 
 
 def parse_filename(filename: str, label: str) -> dict:
-    """Pull (year, sensor, material) from a normalized filename."""
+    """Pull (year, sensor, material) from a normalized filename.
+
+    Filename forms after normalization:
+        live  : {year}_{sensor}_{original}.{ext}
+        spoof : {year}_{sensor}_{material}_{original}.{ext}
+
+    Sensor names can contain underscores (DigitalPersona, HiScan in 2015).
+    We match against a whitelist of known sensors, longest first.
+    """
     stem = Path(filename).stem
-    m = NAME_RE.match(stem)
+    m = YEAR_RE.match(stem)
     if not m:
         return {"year": None, "sensor": None, "material": None}
 
     year = m.group("year")
-    sensor = m.group("sensor")
     rest = m.group("rest")
+
+    sensor, after_sensor = None, None
+    for candidate in KNOWN_SENSORS:
+        if rest.startswith(candidate + "_") or rest == candidate:
+            sensor = candidate.replace("_", "")        # normalize away the underscore
+            after_sensor = rest[len(candidate):].lstrip("_")
+            break
+    if sensor is None:
+        # Fallback: first underscore-separated token
+        first, _, after_sensor = rest.partition("_")
+        sensor = first
 
     material = None
     if label == "spoof":
-        # First token of rest is the material (Silicone, Latex, …)
-        material = rest.split("_", 1)[0]
+        material = (after_sensor.split("_", 1)[0]
+                    if after_sensor else "unknown")
 
     return {"year": year, "sensor": sensor, "material": material}
 

@@ -1,0 +1,40 @@
+{
+  "checkpoint": "checkpoints\\resnet50_cbam_20260612_145118\\best.pth",
+  "model": "resnet50_cbam",
+  "threshold": 0.5,
+  "n_test": 29840,
+  "overall": {
+    "threshold": 0.5,
+    "accuracy": 0.9321045576407506,
+    "precision": 0.985827910339841,
+    "recall": 0.8816606311433006,
+    "f1": 0.9308390796750188,
+    "roc_auc": 0.9901464894607931,
+    "apcer": 11.833936885669944,
+    "bpcer": 1.3633834168057875,
+    "ace": 6.5986601512378655,
+    "eer": 5.439029626603633,
+    "eer_threshold": 0.02500942349433899,
+    "n_total": 29840,
+    "n_live": 14376,
+    "n_spoof": 15464
+  },
+  "confusion_matrix": [
+    [
+      14180,
+      196
+    ],
+    [
+      1830,
+      13634
+    ]
+  ],
+  "saved_at": "20260616_201015",
+  "files": {
+    "per_sensor": "D:\\Projects\\University\\Final year Resarch project\\results\\cross_eval_resnet50_cbam_20260616_201015_per_sensor.csv",
+    "per_year": "D:\\Projects\\University\\Final year Resarch project\\results\\cross_eval_resnet50_cbam_20260616_201015_per_year.csv",
+    "per_material": "D:\\Projects\\University\\Final year Resarch project\\results\\cross_eval_resnet50_cbam_20260616_201015_per_material.csv",
+    "sensor_x_material": "D:\\Projects\\University\\Final year Resarch project\\results\\cross_eval_resnet50_cbam_20260616_201015_sensor_x_material.csv",
+    "predictions": "D:\\Projects\\University\\Final year Resarch project\\results\\cross_eval_resnet50_cbam_20260616_201015_predictions.csv"
+  }
+}
