@@ -21,13 +21,20 @@ def render():
         unsafe_allow_html=True,
     )
 
-    c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 1])
+    # Symmetric layout: spacer | btn | btn | spacer  →  buttons are
+    # truly centered and identical width regardless of label length.
+    c1, c2, c3, c4 = st.columns([2.5, 1.4, 1.4, 2.5])
     with c2:
-        if st.button("▶  Start Analysis", type="primary", use_container_width=True):
+        if st.button("▶  Start Analysis",
+                     type="primary",
+                     use_container_width=True,
+                     key="home_start"):
             st.session_state.current_page = "analyze"
             st.rerun()
     with c3:
-        if st.button("📖  Methodology", use_container_width=True):
+        if st.button("📖  Methodology",
+                     use_container_width=True,
+                     key="home_methodology"):
             st.session_state.current_page = "about"
             st.rerun()
 

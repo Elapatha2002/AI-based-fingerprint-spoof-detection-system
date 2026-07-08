@@ -1,8 +1,12 @@
 """Screen 3 — Batch Processing with progress + live tail."""
 import time
 from datetime import datetime
+from io import BytesIO
+
 import streamlit as st
 import pandas as pd
+from PIL import Image
+
 from components.cards import page_title
 from services import mock_model
 from state import add_to_history
@@ -49,8 +53,12 @@ def render():
 
     results = []
     started = time.time()
-    for i, (filename, _data) in enumerate(files):
-        result = mock_model.predict(filename)
+    for i, (filename, data) in enumerate(files):
+        try:
+            img = Image.open(BytesIO(data)) if data else None
+        except Exception:
+            img = None
+        result = mock_model.predict(filename, img)
         results.append(result)
 
         pct = (i + 1) / len(files)

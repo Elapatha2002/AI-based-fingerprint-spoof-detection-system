@@ -11,7 +11,8 @@ from utils.image_loader import load_image
 
 @st.cache_data(show_spinner=False)
 def _cached_predict(filename: str, image_bytes: bytes) -> dict:
-    return mock_model.predict(filename)
+    img = Image.open(BytesIO(image_bytes)) if image_bytes else None
+    return mock_model.predict(filename, img)
 
 
 @st.cache_data(show_spinner=False)

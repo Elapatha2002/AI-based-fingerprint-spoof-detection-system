@@ -6,6 +6,8 @@ import zipfile
 
 from components.cards import page_title, divider, section_header
 from components.tables import results_table
+from components.case_strip import render_case_strip
+from components.audit import render_audit_drawer
 
 
 def render():
@@ -20,9 +22,23 @@ def render():
     results = batch["results"]
     meta = batch["meta"]
 
+    # Persistent case context
+    from datetime import datetime
+    strip_meta = dict(meta)
+    strip_meta.setdefault("timestamp",
+                          datetime.now().isoformat(timespec="seconds"))
+    render_case_strip(
+        strip_meta,
+        status=st.session_state.get("case_status", "In Review"),
+        extra_right=(
+            f"<span class='fsd-case-label'>Images</span>"
+            f"<span class='fsd-case-value'>{len(results)}</span>"
+        ),
+    )
+
     page_title(
         "Batch Dashboard",
-        f"{meta['case_id']} · {meta['examiner']} · {len(results)} images",
+        "Aggregate analysis across all uploaded images",
     )
 
     # Top: export buttons
@@ -102,6 +118,11 @@ def render():
                 st.session_state.drilldown_filtered = filtered.to_dict("records")
                 st.session_state.current_page = "drilldown"
                 st.rerun()
+
+    divider()
+
+    # Audit trail for this batch
+    render_audit_drawer(case_id=meta.get("case_id"), expanded=False)
 
 
 def _build_csv(results: list[dict]) -> bytes:

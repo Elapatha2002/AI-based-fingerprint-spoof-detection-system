@@ -29,8 +29,14 @@ def metric_card(label: str, value: str, sub: str = "", color: str = "primary"):
 
 
 def verdict_card(label: str, confidence: float, material: str | None = None,
-                 borderline: bool = False):
-    """Render the big verdict block."""
+                 borderline: bool = False, hero: bool = False):
+    """Render the big verdict block.
+
+    Args:
+        hero: if True, applies the larger "hero" treatment (44px verdict text,
+              tighter spacing) — recommended on result pages where the verdict
+              is the primary information.
+    """
     if borderline:
         cls = "warn"
         color_label = "BORDERLINE"
@@ -48,9 +54,11 @@ def verdict_card(label: str, confidence: float, material: str | None = None,
             f"Material: <b>{material}</b></div>"
         )
 
+    hero_class = " fsd-verdict-hero" if hero else ""
+
     st.markdown(
         f"""
-        <div class="fsd-verdict {cls}">
+        <div class="fsd-verdict {cls}{hero_class}">
           <div class="fsd-verdict-label">Verdict</div>
           <div class="fsd-verdict-value">{color_label}</div>
           <div class="fsd-verdict-sub">{confidence:.2%} confidence</div>
@@ -58,6 +66,19 @@ def verdict_card(label: str, confidence: float, material: str | None = None,
           {caveat}
         </div>
         """,
+        unsafe_allow_html=True,
+    )
+
+
+def tech_strip(items: list[str]) -> None:
+    """Compact monospace strip for tertiary tech info (timing, model, hash).
+
+    items: list of HTML strings (or plain text) to display, separated by dots.
+    """
+    sep = "<span class='sep'>·</span>"
+    inner = sep.join(f"<span>{x}</span>" for x in items)
+    st.markdown(
+        f"<div class='fsd-tech-strip'>{inner}</div>",
         unsafe_allow_html=True,
     )
 

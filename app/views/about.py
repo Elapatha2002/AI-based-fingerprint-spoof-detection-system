@@ -1,11 +1,17 @@
 """Screen 9 — About / Methodology."""
 import streamlit as st
 from components.cards import page_title, section_header, divider
+from components.model_picker import render_model_picker
 
 
 def render():
     page_title("About / Methodology",
                "How this system works, what it was trained on, and what it cannot do.")
+
+    # Model picker (real mode only)
+    section_header("Active Model")
+    render_model_picker()
+    divider()
 
     cols = st.columns([1, 3])
 

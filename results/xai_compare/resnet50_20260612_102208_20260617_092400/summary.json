@@ -1,0 +1,32 @@
+[
+  {
+    "method": "gradcam",
+    "n_images": 10,
+    "deletion_auc_mean": 0.6245302043240836,
+    "deletion_auc_sd": 0.3869420676534669,
+    "insertion_auc_mean": 0.6652526155189575,
+    "insertion_auc_sd": 0.3700900582839846,
+    "sparsity_mean": 0.6270707110969388,
+    "compute_ms_mean": 155.0
+  },
+  {
+    "method": "shap",
+    "n_images": 10,
+    "deletion_auc_mean": 0.5655026774635404,
+    "deletion_auc_sd": 0.31278440861885154,
+    "insertion_auc_mean": 0.6434908450674593,
+    "insertion_auc_sd": 0.30759656797354895,
+    "sparsity_mean": 0.9060407366071427,
+    "compute_ms_mean": 31782.8
+  },
+  {
+    "method": "lime",
+    "n_images": 10,
+    "deletion_auc_mean": 0.4632916133848653,
+    "deletion_auc_sd": 0.4023317593517715,
+    "insertion_auc_mean": 0.49770447433516374,
+    "insertion_auc_sd": 0.42027171755956794,
+    "sparsity_mean": 0.26023198341836734,
+    "compute_ms_mean": 18854.5
+  }
+]

@@ -16,6 +16,11 @@ def init_state():
         "form_examiner": "",
         "form_sensor": "Biometrika 400B",
         "form_notes": "",
+        # New for v2 UI
+        "audit_log": [],            # list of {ts, actor, action, case_id, details}
+        "decision_threshold": 0.5,  # configurable classifier threshold
+        "eer_threshold": 0.22,      # operating point from thesis evaluation
+        "case_status": "Open",      # Open | In Review | Closed | Escalated
     }
     for k, v in defaults.items():
         if k not in st.session_state:

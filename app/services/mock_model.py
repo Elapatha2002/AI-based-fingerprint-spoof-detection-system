@@ -1,11 +1,17 @@
 """
 Mock predictor + mock XAI generator.
-Returns deterministic outputs based on filename hash so the prototype
-behaves consistently across reruns. Replace with real model later —
-the public API (predict, explain) is what the views consume.
+
+By default produces deterministic outputs based on filename hash, so the
+prototype works without any trained model. Set the environment variable
+`FSDXAI_REAL_MODEL=1` BEFORE launching Streamlit to dispatch every call
+to the real-model service in `real_model.py` instead.
+
+The dispatcher pattern keeps views unchanged whether you're in mock or
+real mode.
 """
 import hashlib
 import io
+import os
 import time
 import numpy as np
 from PIL import Image
@@ -17,12 +23,24 @@ import matplotlib.pyplot as plt
 SPOOF_MATERIALS = ["Silicone", "Gelatin", "Latex", "Play-Doh", "Wood Glue", "Ecoflex"]
 
 
+def _real_mode() -> bool:
+    """Return True if the user has opted into real model + XAI inference."""
+    return os.environ.get("FSDXAI_REAL_MODEL") == "1"
+
+
 def _seed_from_name(name: str) -> int:
     return int(hashlib.md5(name.encode()).hexdigest()[:8], 16)
 
 
 def predict(filename: str, image: Image.Image | None = None) -> dict:
-    """Return a fake but deterministic prediction. Mimics latency of real model."""
+    """Return a fake but deterministic prediction. Mimics latency of real model.
+
+    If FSDXAI_REAL_MODEL=1 is set, dispatches to real_model.predict() instead.
+    """
+    if _real_mode():
+        from services import real_model
+        return real_model.predict(filename, image)
+
     rng = np.random.default_rng(_seed_from_name(filename))
 
     # Filename hints — useful when iterating against a labelled dataset
@@ -121,7 +139,15 @@ def _heatmap_image(base_img: Image.Image, seed: int, kind: str) -> bytes:
 
 
 def explain(filename: str, image: Image.Image | None = None) -> dict:
-    """Generate three XAI heatmaps + faithfulness scores. Slow (mimics SHAP/LIME)."""
+    """Generate three XAI heatmaps + faithfulness scores. Slow (mimics SHAP/LIME).
+
+    If FSDXAI_REAL_MODEL=1 is set, dispatches to real_model.explain() instead,
+    which runs Grad-CAM++ / SHAP / LIME on the loaded trained model.
+    """
+    if _real_mode():
+        from services import real_model
+        return real_model.explain(filename, image)
+
     seed = _seed_from_name(filename)
     rng = np.random.default_rng(seed)
 

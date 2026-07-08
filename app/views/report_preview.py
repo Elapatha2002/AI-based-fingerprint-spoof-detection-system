@@ -4,6 +4,8 @@ import streamlit as st
 import base64
 
 from components.cards import page_title, banner
+from components.case_strip import render_case_strip
+from components.audit import log_action, render_audit_drawer
 from utils.report_generator import build_report
 
 
@@ -21,10 +23,15 @@ def render():
     result = target["result"]
     xai = target["xai"]
 
+    strip_meta = dict(meta)
+    strip_meta.setdefault("timestamp",
+                          datetime.now().isoformat(timespec="seconds"))
+    render_case_strip(strip_meta,
+                      status=st.session_state.get("case_status", "In Review"))
+
     page_title(
         "Report Preview",
-        f"{meta.get('case_id', '—')} · {filename} · "
-        f"Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"{filename} · Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
     )
 
     case_meta = {
@@ -89,7 +96,7 @@ def render():
 
     a1, a2, a3, _ = st.columns([1, 1, 1, 3])
     with a1:
-        st.download_button(
+        clicked = st.download_button(
             "⬇  Download PDF",
             data=pdf_bytes,
             file_name=f"{meta.get('case_id', 'report')}_{filename}.pdf",
@@ -97,6 +104,12 @@ def render():
             type="primary",
             use_container_width=True,
         )
+        if clicked:
+            log_action(
+                action=f"Downloaded forensic report",
+                case_id=meta.get("case_id", "—"),
+                details=f"file={filename}, size={len(pdf_bytes)} bytes",
+            )
     with a2:
         if st.button("✉  Email (mock)", use_container_width=True,
                      key="rp_email"):
@@ -106,3 +119,8 @@ def render():
         if st.button("◀  Back", use_container_width=True, key="rp_back"):
             st.session_state.current_page = "single_result"
             st.rerun()
+
+    st.markdown("<div class='fsd-divider'></div>", unsafe_allow_html=True)
+
+    # Audit drawer at the bottom of the report page
+    render_audit_drawer(case_id=meta.get("case_id"), expanded=False)

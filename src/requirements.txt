@@ -10,3 +10,10 @@ pillow>=10.0.0
 
 # Utility
 tqdm>=4.66.0
+matplotlib>=3.7.0
+
+# XAI (Phase 5)
+grad-cam>=1.5.0
+shap>=0.46.0
+lime>=0.2.0.1
+scikit-image>=0.22.0     # for LIME segmentation

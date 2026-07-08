@@ -1,6 +1,7 @@
 """Screen 2 — Analyze (single + batch zip upload)."""
 import streamlit as st
 from components.cards import page_title, banner
+from components.audit import log_action
 from utils.image_loader import load_image, is_supported
 from utils.zip_handler import inspect_zip
 from state import auto_case_id
@@ -120,6 +121,11 @@ def _render_single_tab():
                 "image_bytes": uploaded.read(),
                 "meta": meta,
             }
+            log_action(
+                action=f"Uploaded image {uploaded.name}",
+                case_id=meta.get("case_id", "—"),
+                details=f"sensor={meta.get('sensor')}",
+            )
             st.session_state.current_page = "single_result"
             st.rerun()
 
@@ -185,6 +191,11 @@ def _render_batch_tab():
                      disabled=not ready,
                      use_container_width=True,
                      key="batch_start"):
+            log_action(
+                action=f"Started batch analysis of {valid_count} images",
+                case_id=meta.get("case_id", "—"),
+                details=f"sensor={meta.get('sensor')}, ignored={summary['ignored']}",
+            )
             st.session_state.current_batch = {
                 "files": summary["files"],
                 "ignored": summary["ignored"],
