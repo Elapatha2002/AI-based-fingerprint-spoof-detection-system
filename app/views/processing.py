@@ -110,6 +110,22 @@ def render():
         "files": files,
     })
 
+    # Persist the batch to S3 + SQLite (best-effort). Runs after the visible
+    # progress has finished so cloud latency does not affect the UX.
+    try:
+        from app.services import persistence
+        from components.audit import log_action
+        ids = persistence.save_batch_analyses(meta=meta, files=files,
+                                               results=results)
+        if ids:
+            log_action(
+                action=f"Persisted batch of {len(ids)} analyses to S3 + SQLite",
+                case_id=meta.get("case_id", "—"),
+                details=f"first_id={ids[0]}, last_id={ids[-1]}",
+            )
+    except Exception:
+        pass
+
     time.sleep(0.4)
     st.session_state.current_page = "batch_dashboard"
     st.rerun()

@@ -49,7 +49,7 @@ class MultiScaleChannelAttention(nn.Module):
     """
 
     def __init__(self, channels: int,
-                 reduction_ratios: tuple[int, ...] = (8, 16, 32)):
+                 reduction_ratios: tuple[int, ...] = (8, 16)):
         super().__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.max_pool = nn.AdaptiveMaxPool2d(1)
@@ -117,8 +117,8 @@ class FSDCBAM(nn.Module):
     """
 
     def __init__(self, channels: int,
-                 reduction_ratios: tuple[int, ...] = (8, 16, 32),
-                 spatial_kernel: int = 11):
+                 reduction_ratios: tuple[int, ...] = (8, 16),
+                 spatial_kernel: int = 7):
         super().__init__()
         self.channel = MultiScaleChannelAttention(channels, reduction_ratios)
         self.spatial = WideSpatialAttention(spatial_kernel)

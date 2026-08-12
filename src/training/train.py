@@ -123,8 +123,33 @@ def main():
     print(f"  parameters: total={total_p/1e6:.1f}M  trainable={train_p/1e6:.1f}M")
 
     criterion = nn.BCEWithLogitsLoss()
-    optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()),
-                      lr=args.lr, weight_decay=C.WEIGHT_DECAY)
+
+    # Differential LR: randomly-initialised attention modules and classifier
+    # head train at 10× the trunk LR. Standard transfer-learning practice —
+    # the pretrained ImageNet trunk needs a small LR to avoid destroying its
+    # learned features, while the new modules need a larger LR to converge.
+    new_module_params, backbone_params = [], []
+    for name, p in model.named_parameters():
+        if not p.requires_grad:
+            continue
+        if "fsd_cbam" in name or "cbam" in name or name.startswith("fc"):
+            new_module_params.append(p)
+        else:
+            backbone_params.append(p)
+
+    if new_module_params:
+        optimizer = AdamW(
+            [
+                {"params": backbone_params,     "lr": args.lr},
+                {"params": new_module_params,   "lr": args.lr * 10},
+            ],
+            weight_decay=C.WEIGHT_DECAY,
+        )
+        print(f"  optimizer: backbone lr={args.lr:.2e}, "
+              f"new-modules lr={args.lr * 10:.2e}")
+    else:
+        optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()),
+                          lr=args.lr, weight_decay=C.WEIGHT_DECAY)
     scheduler = CosineAnnealingLR(optimizer, T_max=epochs)
 
     run_id = f"{args.tag}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"

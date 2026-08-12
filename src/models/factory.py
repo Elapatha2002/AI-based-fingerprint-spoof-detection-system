@@ -13,6 +13,7 @@ import torch.nn as nn
 
 from src.models.resnet import build_resnet50
 from src.models.resnet_cbam import build_resnet50_cbam
+from src.models.resnet_fsd_cbam import build_resnet50_fsd_cbam
 from src.models.mobilenet import build_mobilenetv3
 
 
@@ -29,6 +30,15 @@ def _resnet50_cbam(**kw):
         freeze_backbone=kw.get("freeze_backbone", False),
         reduction=kw.get("reduction", 16),
         spatial_kernel=kw.get("spatial_kernel", 7),
+    )
+
+
+def _fsd_cbam(**kw):
+    return build_resnet50_fsd_cbam(
+        pretrained=kw.get("pretrained", True),
+        freeze_backbone=kw.get("freeze_backbone", False),
+        layers=kw.get("layers", (3, 4)),
+        reduction_ratios=kw.get("reduction_ratios", (8, 16)),
     )
 
 
@@ -51,6 +61,7 @@ def _mobilenetv3_small(**kw):
 MODEL_REGISTRY = {
     "resnet50": _resnet50,
     "resnet50_cbam": _resnet50_cbam,
+    "fsd_cbam": _fsd_cbam,
     "mobilenetv3_large": _mobilenetv3_large,
     "mobilenetv3_small": _mobilenetv3_small,
 }

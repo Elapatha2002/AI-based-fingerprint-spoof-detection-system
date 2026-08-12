@@ -110,6 +110,29 @@ def render():
                 case_id=meta.get("case_id", "—"),
                 details=f"file={filename}, size={len(pdf_bytes)} bytes",
             )
+
+            # Also archive the PDF in S3 and record it in the DB. A
+            # separate flag keeps this from running twice within a rerun.
+            arch_key = f"report_archived_{meta.get('case_id')}_{filename}"
+            if not st.session_state.get(arch_key):
+                try:
+                    from app.services import persistence
+                    rid = persistence.save_report_to_cloud(
+                        case_id=meta.get("case_id", "—"),
+                        pdf_bytes=pdf_bytes,
+                        examiner=meta.get("examiner", ""),
+                    )
+                    if rid:
+                        st.session_state[arch_key] = True
+                        st.toast(f"Report archived to cloud ({rid}).",
+                                 icon="☁")
+                        log_action(
+                            action="Archived report to S3 + SQLite",
+                            case_id=meta.get("case_id", "—"),
+                            details=f"report_id={rid}",
+                        )
+                except Exception:
+                    pass
     with a2:
         if st.button("✉  Email (mock)", use_container_width=True,
                      key="rp_email"):

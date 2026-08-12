@@ -38,6 +38,16 @@ def log_action(action: str,
     }
     st.session_state.audit_log.append(entry)
 
+    # Best-effort dual write to SQLite so the audit trail survives restarts.
+    # A DB outage must not break the UI, so all failures are swallowed.
+    try:
+        from app.services import database
+        db_case_id = "" if case_id in ("—", "-") else case_id
+        database.log_event(action=action, case_id=db_case_id,
+                            user=actor, details=details)
+    except Exception:
+        pass
+
 
 def log_count() -> int:
     return len(st.session_state.get("audit_log", []))

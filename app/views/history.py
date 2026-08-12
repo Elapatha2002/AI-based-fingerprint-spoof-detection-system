@@ -6,9 +6,12 @@ from components.tables import history_table
 
 def render():
     page_title("History",
-               "All past analyses on this device (in-session for the prototype).")
+               "Persisted analyses (SQLite + AWS S3). "
+               "Falls back to session-state if cloud is offline.")
 
-    history = st.session_state.get("history", [])
+    # Prefer the persisted store; fall back to session history if DB read fails
+    # or nothing has been saved yet.
+    history = _load_history_from_db_or_session()
 
     if not history:
         st.markdown(
@@ -60,17 +63,86 @@ def render():
         if st.button("Open →", type="primary", key="hist_open"):
             entry = filtered[idx]
             if entry["type"] == "batch":
-                st.session_state.current_batch = {
-                    "files": entry.get("files", []),
-                    "results": entry.get("results", []),
-                    "meta": entry.get("meta", {}),
-                }
+                # For persisted batches, refetch every image from S3.
+                # For in-session batches, use the cached files list.
+                if entry.get("_source") == "db":
+                    files = _fetch_batch_from_s3(entry["case_id"])
+                    st.session_state.current_batch = {
+                        "files": files,
+                        "results": [],
+                        "meta": entry.get("meta", {}),
+                    }
+                else:
+                    st.session_state.current_batch = {
+                        "files": entry.get("files", []),
+                        "results": entry.get("results", []),
+                        "meta": entry.get("meta", {}),
+                    }
                 st.session_state.current_page = "batch_dashboard"
             else:
+                # For persisted single, download the original image from S3.
+                image_bytes = b""
+                if entry.get("_source") == "db":
+                    image_bytes = _fetch_single_from_s3(entry["case_id"])
                 st.session_state.current_single = {
-                    "filename": entry.get("filename", "—"),
-                    "image_bytes": b"",
+                    "filename": entry.get("filename", "-"),
+                    "image_bytes": image_bytes,
                     "meta": entry.get("meta", {}),
                 }
                 st.session_state.current_page = "single_result"
             st.rerun()
+
+
+def _fetch_single_from_s3(case_id: str) -> bytes:
+    """Download the most recent analysis's image bytes for a case."""
+    try:
+        from app.services import database, storage
+        analyses = database.list_analyses(case_id=case_id, limit=1)
+        if not analyses:
+            return b""
+        return storage.get_storage().download_bytes(analyses[0]["image_s3_key"])
+    except Exception:
+        return b""
+
+
+def _fetch_batch_from_s3(case_id: str) -> list[tuple[str, bytes]]:
+    """Download every analysis's image bytes as (filename, bytes) tuples."""
+    try:
+        from app.services import database, storage
+        svc = storage.get_storage()
+        analyses = database.list_analyses(case_id=case_id, limit=500)
+        files: list[tuple[str, bytes]] = []
+        for a in analyses:
+            try:
+                data = svc.download_bytes(a["image_s3_key"])
+                files.append((a["image_filename"], data))
+            except Exception:
+                continue
+        return files
+    except Exception:
+        return []
+
+
+def _load_history_from_db_or_session() -> list[dict]:
+    """DB-first with graceful fallback.
+
+    Merges DB rows and session-state rows so unsaved (in-flight) analyses
+    remain visible during a session, while restarts still show persisted
+    history from previous sessions.
+    """
+    session_history = list(st.session_state.get("history", []))
+    try:
+        from app.services import persistence
+        db_history = persistence.list_history_from_db()
+    except Exception:
+        db_history = []
+
+    # Prefer DB rows for case IDs that exist in both places; append any
+    # session rows for cases not yet persisted.
+    db_case_ids = {row["case_id"] for row in db_history}
+    session_only = [row for row in session_history
+                    if row.get("case_id") not in db_case_ids]
+
+    merged = db_history + session_only
+    merged.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+    return merged

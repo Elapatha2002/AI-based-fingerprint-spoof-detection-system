@@ -1,2 +1,26 @@
 DataSet/
 results/xai_gallery/*
+
+# Secrets — NEVER commit
+.env
+.env.*
+!.env.example
+aws_credentials*
+*.pem
+fsd-xai-app-user_accessKeys.csv
+
+# Local databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Local file storage staging
+uploads/
+storage_local/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
