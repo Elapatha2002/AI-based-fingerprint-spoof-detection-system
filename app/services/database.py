@@ -93,11 +93,24 @@ CREATE TABLE IF NOT EXISTS audit_log (
     created_at   TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS users (
+    user_id        TEXT PRIMARY KEY,
+    username       TEXT UNIQUE NOT NULL,
+    password_hash  TEXT NOT NULL,             -- format: <salt_hex>:<hash_hex>
+    role           TEXT NOT NULL,             -- super_admin | examiner
+    full_name      TEXT NOT NULL,
+    email          TEXT,
+    active         INTEGER NOT NULL DEFAULT 1,
+    created_at     TEXT NOT NULL,
+    last_login     TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_analyses_case ON analyses(case_id);
 CREATE INDEX IF NOT EXISTS idx_xai_analysis ON xai_outputs(analysis_id);
 CREATE INDEX IF NOT EXISTS idx_audit_case ON audit_log(case_id);
 CREATE INDEX IF NOT EXISTS idx_audit_analysis ON audit_log(analysis_id);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 """
 
 
@@ -308,6 +321,87 @@ def get_audit_trail(case_id: Optional[str] = None,
     params.append(limit)
     with connect() as conn:
         return [dict(r) for r in conn.execute(q, params).fetchall()]
+
+
+# ── Users ─────────────────────────────────────────────────────────────
+
+def create_user(username: str, password_hash: str, role: str,
+                full_name: str, email: str = "") -> str:
+    """Insert a user row. Caller supplies the pre-hashed password."""
+    if role not in ("super_admin", "examiner"):
+        raise ValueError(f"Invalid role: {role}")
+    user_id = f"USR-{_uid()}"
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO users (user_id, username, password_hash, role, "
+            "full_name, email, active, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
+            (user_id, username, password_hash, role, full_name, email, _now()),
+        )
+    return user_id
+
+
+def get_user_by_username(username: str) -> Optional[dict]:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_user(user_id: str) -> Optional[dict]:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def list_users(include_inactive: bool = True) -> list[dict]:
+    q = "SELECT * FROM users"
+    if not include_inactive:
+        q += " WHERE active = 1"
+    q += " ORDER BY role DESC, username ASC"
+    with connect() as conn:
+        return [dict(r) for r in conn.execute(q).fetchall()]
+
+
+def user_count() -> int:
+    with connect() as conn:
+        return conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
+
+
+def update_user(user_id: str, *, full_name: Optional[str] = None,
+                email: Optional[str] = None, role: Optional[str] = None,
+                active: Optional[int] = None,
+                password_hash: Optional[str] = None) -> None:
+    fields, params = [], []
+    for name, value in [("full_name", full_name), ("email", email),
+                        ("role", role), ("active", active),
+                        ("password_hash", password_hash)]:
+        if value is not None:
+            fields.append(f"{name} = ?")
+            params.append(value)
+    if not fields:
+        return
+    params.append(user_id)
+    with connect() as conn:
+        conn.execute(
+            f"UPDATE users SET {', '.join(fields)} WHERE user_id = ?",
+            params,
+        )
+
+
+def touch_last_login(user_id: str) -> None:
+    with connect() as conn:
+        conn.execute("UPDATE users SET last_login = ? WHERE user_id = ?",
+                      (_now(), user_id))
+
+
+def delete_user(user_id: str) -> None:
+    """Hard delete. Prefer update_user(active=0) to preserve audit trail."""
+    with connect() as conn:
+        conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
 
 
 # ── One-liner init when imported ──────────────────────────────────────

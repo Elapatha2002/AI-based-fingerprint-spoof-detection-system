@@ -30,21 +30,31 @@ def render():
 
 
 def _render_meta_form(key_prefix: str):
-    """Shared case metadata form. Returns dict of values."""
+    """Shared case metadata form. Returns dict of values.
+
+    The examiner field is auto-filled from the logged-in user and rendered
+    read-only. The case ID is auto-incremented from the DB.
+    """
     if not st.session_state.get("form_case_id"):
         st.session_state.form_case_id = auto_case_id()
+
+    # Pull the examiner from the auth session
+    from app.services import auth
+    user = auth.current_user()
+    examiner_name = user["full_name"] if user else ""
 
     case_id = st.text_input(
         "Case ID *",
         value=st.session_state.form_case_id,
         key=f"{key_prefix}_case_id",
-        help="Format: CASE-YYYY-####",
+        help="Auto-incremented per year. Format: CASE-YYYY-####",
     )
-    examiner = st.text_input(
-        "Examiner *",
-        value=st.session_state.form_examiner,
-        key=f"{key_prefix}_examiner",
-        placeholder="P. Elapatha",
+    st.text_input(
+        "Examiner (from your account)",
+        value=examiner_name,
+        key=f"{key_prefix}_examiner_display",
+        disabled=True,
+        help="This field is set by your login account and cannot be edited.",
     )
     sensor = st.selectbox(
         "Sensor",
@@ -63,7 +73,7 @@ def _render_meta_form(key_prefix: str):
 
     return {
         "case_id": case_id.strip(),
-        "examiner": examiner.strip(),
+        "examiner": examiner_name.strip(),
         "sensor": sensor,
         "notes": notes.strip(),
     }

@@ -28,8 +28,11 @@ from nav import render_nav, render_statusbar  # noqa: E402
 from views import (  # noqa: E402
     home, analyze, processing, batch_dashboard,
     single_result, drilldown, report_preview,
-    history, about, compare_xai,
+    history, about, compare_xai, login, settings,
 )
+
+# Auth service — must import after sys.path is set up
+from app.services import auth  # noqa: E402
 
 
 PAGES = {
@@ -43,15 +46,46 @@ PAGES = {
     "history": history.render,
     "about": about.render,
     "compare_xai": compare_xai.render,
+    "settings": settings.render,
 }
+
+
+# Bootstrap: seed super admin from .env if users table is empty.
+# Runs once per process. Streamlit reruns the whole script on each event,
+# so we guard with a module-level flag.
+_BOOTSTRAP_DONE = False
+
+
+def _bootstrap_once():
+    global _BOOTSTRAP_DONE
+    if _BOOTSTRAP_DONE:
+        return
+    try:
+        auth.seed_super_admin_if_needed()
+    except Exception:
+        pass
+    _BOOTSTRAP_DONE = True
 
 
 def main():
     apply_theme()
     init_state()
+    _bootstrap_once()
+
+    # AUTH GATE — if nobody is logged in, render only the login page.
+    if not auth.is_logged_in():
+        login.render()
+        return
+
     render_nav()
 
     page_key = st.session_state.get("current_page", "home")
+
+    # Role guard for admin-only pages
+    if page_key == "settings" and not auth.is_super_admin():
+        st.session_state.current_page = "home"
+        page_key = "home"
+
     render_fn = PAGES.get(page_key, home.render)
     render_fn()
 

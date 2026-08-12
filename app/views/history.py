@@ -31,9 +31,15 @@ def render():
                                placeholder="🔍 Search by case ID...",
                                label_visibility="collapsed")
     with f2:
-        type_filter = st.selectbox("Type", ["All", "Single", "Batch"],
-                                   key="hist_type")
+        type_filter = st.selectbox(
+            "Type filter",
+            ["All", "Single", "Batch"],
+            key="hist_type",
+            label_visibility="collapsed",
+            format_func=lambda x: f"Type: {x}",
+        )
     with f3:
+        st.markdown("<div style='height:2px;'></div>", unsafe_allow_html=True)
         if st.button("🗑  Clear All", use_container_width=True,
                      key="hist_clear"):
             st.session_state.history = []
