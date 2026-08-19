@@ -4,7 +4,9 @@ import pandas as pd
 from io import BytesIO
 import zipfile
 
-from components.cards import page_title, divider, section_header
+from components.cards import (
+    page_title, divider, section_header, empty_state,
+)
 from components.tables import results_table
 from components.case_strip import render_case_strip
 from components.audit import render_audit_drawer
@@ -13,10 +15,13 @@ from components.audit import render_audit_drawer
 def render():
     batch = st.session_state.get("current_batch")
     if not batch or not batch.get("results"):
-        st.warning("No batch results to display.")
-        if st.button("Go to Analyze"):
-            st.session_state.current_page = "analyze"
-            st.rerun()
+        empty_state(
+            icon="📊",
+            message="No batch has been run yet. Upload a zip on the Analyse page.",
+            action_label="Go to Analyse  →",
+            action_page="analyze",
+            key="empty_batch_start",
+        )
         return
 
     results = batch["results"]
@@ -83,18 +88,35 @@ def render():
     # Filters
     section_header("Results")
 
+    # All four controls share the same top edge. Selectboxes hide their
+    # own label and use format_func to keep the filter name inline; the
+    # checkbox is nudged down with a spacer so it aligns with the inputs.
     f1, f2, f3, f4 = st.columns([3, 1, 1, 1])
     with f1:
         search = st.text_input("Search filename",
                                placeholder="🔍 Search...",
                                label_visibility="collapsed")
     with f2:
-        filter_v = st.selectbox("Verdict", ["All", "Live", "Spoof"],
-                                key="bd_filter_v")
+        filter_v = st.selectbox(
+            "Verdict filter",
+            ["All", "Live", "Spoof"],
+            key="bd_filter_v",
+            label_visibility="collapsed",
+            format_func=lambda x: f"Verdict: {x}",
+        )
     with f3:
-        filter_q = st.selectbox("Quality", ["All", "High", "Medium", "Low"],
-                                key="bd_filter_q")
+        filter_q = st.selectbox(
+            "Quality filter",
+            ["All", "High", "Medium", "Low"],
+            key="bd_filter_q",
+            label_visibility="collapsed",
+            format_func=lambda x: f"Quality: {x}",
+        )
     with f4:
+        # Reserve the same vertical space as the other controls' hidden
+        # labels so the checkbox aligns with the top of the row.
+        st.markdown("<div style='height:29px;'></div>",
+                    unsafe_allow_html=True)
         anomaly_only = st.checkbox("⚠ Anomaly only", key="bd_anomaly_only")
 
     filtered = results_table(results, filter_verdict=filter_v,
@@ -144,8 +166,18 @@ def _build_csv(results: list[dict]) -> bytes:
 
 
 def _build_zip_bundle(results: list[dict], meta: dict) -> bytes:
-    """ZIP containing summary CSV + manifest JSON."""
+    """ZIP containing summary CSV + manifest JSON. Manifest records the
+    actual model that produced the results, taken from the first result
+    row rather than hardcoded, so the bundle honours whichever model was
+    selected in the picker at the time of the batch run."""
     buf = BytesIO()
+    model_name = "unknown"
+    commit = "unknown"
+    if results:
+        first = results[0].get("model") or {}
+        model_name = first.get("name", model_name)
+        commit = first.get("commit", commit)
+
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(f"{meta['case_id']}_summary.csv",
                     _build_csv(results).decode("utf-8"))
@@ -154,8 +186,8 @@ def _build_zip_bundle(results: list[dict], meta: dict) -> bytes:
             "examiner": meta["examiner"],
             "sensor": meta["sensor"],
             "count": len(results),
-            "model": "ResNet50V2-CBAM",
-            "commit": "a3f9b21",
+            "model": model_name,
+            "commit": commit,
         }
         import json
         zf.writestr("manifest.json", json.dumps(manifest, indent=2))

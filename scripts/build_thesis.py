@@ -1,15 +1,18 @@
 """
-Build Thesis_Chapters_1-3.docx from structured content.
+Build Thesis_Chapters_1-5.docx from structured content.
 
 Generates a single Microsoft Word document containing:
   • Title page
+  • Table of Contents (auto-populated on first open in Word)
   • Chapter 1 — Introduction
   • Chapter 2 — Literature Review
-  • Chapter 3 — Methodology
+  • Chapter 3 — Methodology (Progress Update)
+  • Chapter 4 — Results and Implementation
+  • Chapter 5 — Discussion
   • References
 
-Formal academic third-person voice throughout. Output file lands at the
-project root.
+Page numbers appear in the footer of every page. Formal academic
+third-person voice throughout. Output file lands at the project root.
 """
 from pathlib import Path
 
@@ -22,7 +25,7 @@ from docx.oxml import OxmlElement
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = PROJECT_ROOT / "Thesis_Chapters_1-3.docx"
+OUTPUT = PROJECT_ROOT / "Thesis_Chapters_1-5.docx"
 FIGURES_DIR = PROJECT_ROOT / "assets" / "figures"
 
 
@@ -66,7 +69,7 @@ def add_title_page(doc: Document) -> None:
     doc.add_paragraph()
 
     for line, italic, bold in [
-        ("Interim Submission 01 — Chapters 1, 2, and 3", True, False),
+        ("Interim Submission 02 — Chapters 1, 2, 3, 4 and 5", True, False),
         ("", False, False),
         ("presented to the Faculty of Computing", False, False),
         ("NSBM Green University", False, False),
@@ -235,7 +238,88 @@ def render_blocks(doc: Document, blocks) -> None:
 # Chapter content
 # ─────────────────────────────────────────────────────────────────────
 
-from chapter_content import CHAPTER_1, CHAPTER_2, CHAPTER_3, REFERENCES
+from chapter_content import (
+    CHAPTER_1, CHAPTER_2, CHAPTER_3, CHAPTER_4, CHAPTER_5, REFERENCES,
+)
+
+
+def add_table_of_contents(doc: Document) -> None:
+    """Insert a Word TOC field that auto-populates from Heading 1/2/3 styles.
+
+    The field is empty until the reader opens the document in Word and
+    right-clicks the placeholder -> Update Field. This is the same pattern
+    Word itself uses when TOCs are inserted via the References menu.
+    """
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = p.add_run("Table of Contents")
+    r.bold = True
+    r.font.size = Pt(18)
+
+    doc.add_paragraph()  # spacer
+
+    p = doc.add_paragraph()
+    run = p.add_run()
+
+    fld_begin = OxmlElement("w:fldChar")
+    fld_begin.set(qn("w:fldCharType"), "begin")
+
+    instr = OxmlElement("w:instrText")
+    instr.set(qn("xml:space"), "preserve")
+    # \o "1-3"  headings 1..3
+    # \h        hyperlinks
+    # \z        hide tab leader in web view
+    # \u        use paragraph outline level
+    instr.text = 'TOC \\o "1-3" \\h \\z \\u'
+
+    fld_sep = OxmlElement("w:fldChar")
+    fld_sep.set(qn("w:fldCharType"), "separate")
+
+    placeholder = OxmlElement("w:t")
+    placeholder.text = ("[Right-click here and choose 'Update Field' in Word "
+                        "to populate the table of contents.]")
+
+    fld_end = OxmlElement("w:fldChar")
+    fld_end.set(qn("w:fldCharType"), "end")
+
+    run._r.append(fld_begin)
+    run._r.append(instr)
+    run._r.append(fld_sep)
+    run._r.append(placeholder)
+    run._r.append(fld_end)
+
+    doc.add_page_break()
+
+
+def add_page_numbers(doc: Document) -> None:
+    """Add a centred 'Page X' number to the footer of every page."""
+    section = doc.sections[0]
+    footer = section.footer
+    p = footer.paragraphs[0]
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.text = ""
+
+    # Add "Page "
+    run = p.add_run("Page ")
+    run.font.size = Pt(9)
+
+    # Add PAGE field
+    run2 = p.add_run()
+    run2.font.size = Pt(9)
+
+    fld_begin = OxmlElement("w:fldChar")
+    fld_begin.set(qn("w:fldCharType"), "begin")
+
+    instr = OxmlElement("w:instrText")
+    instr.set(qn("xml:space"), "preserve")
+    instr.text = "PAGE"
+
+    fld_end = OxmlElement("w:fldChar")
+    fld_end.set(qn("w:fldCharType"), "end")
+
+    run2._r.append(fld_begin)
+    run2._r.append(instr)
+    run2._r.append(fld_end)
 
 
 def main():
@@ -243,12 +327,15 @@ def main():
     setup_styles(doc)
 
     add_title_page(doc)
+    add_table_of_contents(doc)
 
-    for chapter in (CHAPTER_1, CHAPTER_2, CHAPTER_3):
+    for chapter in (CHAPTER_1, CHAPTER_2, CHAPTER_3, CHAPTER_4, CHAPTER_5):
         render_blocks(doc, chapter)
         doc.add_page_break()
 
     render_blocks(doc, REFERENCES)
+
+    add_page_numbers(doc)
 
     try:
         doc.save(OUTPUT)

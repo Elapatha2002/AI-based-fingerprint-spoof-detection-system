@@ -10,8 +10,32 @@ Switching models is cheap if the new model has already been loaded once:
 @st.cache_resource keeps every (model_name, checkpoint_path) combo in
 memory across reruns.
 """
+import json
 import os
+from pathlib import Path
+
 import streamlit as st
+
+
+# Test-metrics JSON files land in <project_root>/results/, named
+# "<checkpoint_folder>_test_metrics.json" (see src/training/train.py).
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_RESULTS_DIR = _PROJECT_ROOT / "results"
+
+
+def _load_test_metrics(checkpoint_short: str) -> dict | None:
+    """Return the test-metrics dict for a checkpoint folder name, or None if
+    no matching file exists. Falls back gracefully — the picker still works
+    for checkpoints that don't have a metrics file yet."""
+    if not checkpoint_short:
+        return None
+    path = _RESULTS_DIR / f"{checkpoint_short}_test_metrics.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
 
 
 def render_model_picker():
@@ -87,6 +111,37 @@ def render_model_picker():
     # Show what's currently loaded (this also triggers initial load)
     try:
         svc = get_service_info()
+        metrics = _load_test_metrics(svc["checkpoint_short"])
+
+        # Build the test-metrics lines only if we have a metrics file for
+        # this checkpoint (some older or in-progress checkpoints won't).
+        metric_lines = ""
+        if metrics:
+            acc = metrics.get("accuracy")
+            auc = metrics.get("roc_auc")
+            ace = metrics.get("ace")
+            if acc is not None:
+                metric_lines += (
+                    f"Accuracy &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp; "
+                    f"<b>{acc:.2%}</b><br/>"
+                )
+            if auc is not None:
+                metric_lines += (
+                    f"AUC &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp; "
+                    f"{auc:.4f}<br/>"
+                )
+            if ace is not None:
+                metric_lines += (
+                    f"ACE &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp; "
+                    f"{ace:.2f}%<br/>"
+                )
+        else:
+            metric_lines = (
+                "Accuracy &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp; "
+                "<span style='color:var(--text-muted);'>no test metrics on "
+                "file for this checkpoint</span><br/>"
+            )
+
         st.markdown(
             f"""
             <div class='fsd-card'>
@@ -94,7 +149,8 @@ def render_model_picker():
               <div class='fsd-mono' style='font-size:13px;line-height:1.8;'>
                 Architecture &nbsp;:&nbsp; <b>{svc['name']}</b><br/>
                 Checkpoint &nbsp;&nbsp;&nbsp;:&nbsp; {svc['checkpoint_short']}<br/>
-                Device &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp; {svc['device']}
+                Device &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp; {svc['device']}<br/>
+                {metric_lines}
               </div>
             </div>
             """,

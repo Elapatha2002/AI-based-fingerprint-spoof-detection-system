@@ -1,6 +1,6 @@
 """Screen 8 — History."""
 import streamlit as st
-from components.cards import page_title
+from components.cards import page_title, empty_state
 from components.tables import history_table
 
 
@@ -14,15 +14,13 @@ def render():
     history = _load_history_from_db_or_session()
 
     if not history:
-        st.markdown(
-            "<div style='text-align:center;padding:64px 0;color:var(--text-muted);'>"
-            "<div style='font-size:48px;'>📂</div>"
-            "<div style='font-size:14px;margin-top:8px;'>No analyses yet.</div></div>",
-            unsafe_allow_html=True,
+        empty_state(
+            icon="📂",
+            message="No analyses saved yet. Run one to see it here.",
+            action_label="Start an analysis  →",
+            action_page="analyze",
+            key="empty_history_start",
         )
-        if st.button("Start an analysis →", type="primary"):
-            st.session_state.current_page = "analyze"
-            st.rerun()
         return
 
     f1, f2, f3 = st.columns([3, 1, 1])
@@ -39,7 +37,13 @@ def render():
             format_func=lambda x: f"Type: {x}",
         )
     with f3:
-        st.markdown("<div style='height:2px;'></div>", unsafe_allow_html=True)
+        # Reserve the same vertical space as a collapsed Streamlit label
+        # (~29px including the label margin) so the button aligns with the
+        # search input and Type dropdown on the same row.
+        st.markdown(
+            "<div style='height:29px;'></div>",
+            unsafe_allow_html=True,
+        )
         if st.button("🗑  Clear All", use_container_width=True,
                      key="hist_clear"):
             st.session_state.history = []

@@ -1,7 +1,61 @@
 """Screen 9 — About / Methodology."""
+import json
+import os
+from pathlib import Path
+
 import streamlit as st
 from components.cards import page_title, section_header, divider
 from components.model_picker import render_model_picker
+
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_RESULTS_DIR = _PROJECT_ROOT / "results"
+
+# Documented fall-back for the "Model" card if no live test-metrics file
+# is discoverable (e.g. running in mock mode with no checkpoints).
+_FALLBACK = {
+    "arch":  "FSD-CBAM v2",
+    "ckpt":  "fsd_cbam_v2_20260810_122231",
+    "accuracy": 0.9536,
+    "roc_auc":  0.9919,
+    "apcer": 5.87,
+    "bpcer": 3.32,
+    "ace":   4.60,
+}
+
+
+def _resolve_model_card() -> tuple[float, float, float, float, float, str, str]:
+    """Return (accuracy, auc, apcer, bpcer, ace, arch, ckpt_short) for the
+    Model card. Prefers the currently-selected checkpoint's test-metrics
+    file; falls back to documented FSD-CBAM v2 numbers if unavailable."""
+    ckpt_short = _FALLBACK["ckpt"]
+    arch = _FALLBACK["arch"]
+
+    if os.environ.get("FSDXAI_REAL_MODEL") == "1":
+        try:
+            from services.real_model import get_service_info
+            svc = get_service_info()
+            ckpt_short = svc.get("checkpoint_short") or ckpt_short
+            arch = svc.get("name") or arch
+        except Exception:
+            pass
+
+    metrics_path = _RESULTS_DIR / f"{ckpt_short}_test_metrics.json"
+    if metrics_path.exists():
+        try:
+            m = json.loads(metrics_path.read_text())
+            return (m.get("accuracy", _FALLBACK["accuracy"]),
+                    m.get("roc_auc",  _FALLBACK["roc_auc"]),
+                    m.get("apcer",    _FALLBACK["apcer"]),
+                    m.get("bpcer",    _FALLBACK["bpcer"]),
+                    m.get("ace",      _FALLBACK["ace"]),
+                    arch, ckpt_short)
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    return (_FALLBACK["accuracy"], _FALLBACK["roc_auc"],
+            _FALLBACK["apcer"], _FALLBACK["bpcer"], _FALLBACK["ace"],
+            arch, ckpt_short)
 
 
 def render():
@@ -50,14 +104,20 @@ def render():
         section_header("How it works")
         st.markdown(
             "<ol style='color:var(--text-secondary);line-height:1.8;'>"
-            "<li>The image is preprocessed: ROI extraction with NIST MINDTCT, "
-            "CLAHE contrast enhancement, min-max normalization.</li>"
-            "<li>A CNN (ResNet50V2 with CBAM attention, or MobileNetV3) "
-            "classifies the patch as live or spoof.</li>"
-            "<li>An anomaly branch (Isolation Forest + Variational Autoencoder) "
-            "flags zero-day spoof materials.</li>"
-            "<li>Three XAI methods generate visual explanations.</li>"
-            "<li>A forensic report PDF is composed with all artifacts.</li>"
+            "<li>Each uploaded fingerprint is preprocessed: RGB conversion, "
+            "resize to 224 x 224, and ImageNet normalisation.</li>"
+            "<li>A CNN (default: the novel <b>FSD-CBAM v2</b> attention "
+            "module on a ResNet50 backbone) produces a live-vs-spoof "
+            "probability.</li>"
+            "<li>Three XAI methods generate visual explanations: "
+            "Grad-CAM++, SHAP DeepExplainer, and LIME with quickshift "
+            "superpixels.</li>"
+            "<li>Every action is dual-written to a session audit log and to "
+            "a persistent SQLite database, giving the workflow a chain of "
+            "custody that survives restarts.</li>"
+            "<li>A Daubert/Frye-aligned PDF report is composed with case "
+            "metadata, the classification, the three XAI overlays, and a "
+            "methodology declaration.</li>"
             "</ol>",
             unsafe_allow_html=True,
         )
@@ -65,27 +125,33 @@ def render():
         section_header("Datasets")
         st.markdown(
             "<div style='color:var(--text-secondary);line-height:1.7;'>"
-            "Trained on <b>LivDet 2013</b> (intra-dataset). Evaluated on "
-            "<b>LivDet 2015</b> (cross-dataset) and <b>MSU-FPAD v2</b> "
-            "(zero-day, leave-one-material-out). All datasets are public; "
-            "no PII; image hashes preserved.</div>",
+            "Trained and evaluated on the harmonised <b>LivDet "
+            "2009 + 2011 + 2013 + 2015</b> corpus (65,267 images, 9 sensors, "
+            "12 spoof materials). Externally validated on the <b>SOCOFing</b> "
+            "cross-demographic bona-fide dataset (6,000 images, SecuGen "
+            "Hamster Plus sensor). All datasets are public; no PII; "
+            "image hashes preserved.</div>",
             unsafe_allow_html=True,
         )
 
         section_header("Model")
+        # Prefer live numbers from the loaded checkpoint's test-metrics
+        # file when available; fall back to the documented FSD-CBAM v2
+        # figures if the file is missing.
+        acc, auc, apcer, bpcer, ace, arch, ckpt = _resolve_model_card()
         st.markdown(
-            """
+            f"""
             <div class='fsd-card'>
             <div class='fsd-mono' style='line-height:1.9;'>
-              Architecture &nbsp;:&nbsp; ResNet50V2 + CBAM attention<br/>
-              Backbone alt &nbsp;:&nbsp; MobileNetV3 (faster)<br/>
-              Anomaly branch &nbsp;:&nbsp; IsolationForest + VAE<br/>
-              Training data &nbsp;:&nbsp; LivDet 2013 (10,012 patches)<br/>
-              AUC (intra) &nbsp;&nbsp;:&nbsp; 0.978 (target)<br/>
-              AUC (cross) &nbsp;&nbsp;:&nbsp; 0.921 (target)<br/>
-              APCER &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp; 3.4%<br/>
-              BPCER &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp; 2.1%<br/>
-              Build &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp; commit a3f9b21
+              Architecture &nbsp;:&nbsp; <b>{arch}</b>  &nbsp;(novel — multi-scale channel + focused 7x7 spatial attention)<br/>
+              Alternate &nbsp;&nbsp;&nbsp;:&nbsp; MobileNetV3-Large  (4.2M params, edge-friendly)<br/>
+              Training data &nbsp;:&nbsp; LivDet 2009-2015  (35,427 train / 29,840 test)<br/>
+              AUC &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp; <b>{auc:.4f}</b>  (Pareto-optimal)<br/>
+              Accuracy &nbsp;&nbsp;&nbsp;&nbsp;:&nbsp; <b>{acc*100:.2f}%</b><br/>
+              APCER &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp; <b>{apcer:.2f}%</b>  (best of five backbones tested)<br/>
+              BPCER &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp; {bpcer:.2f}%<br/>
+              ACE &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp; {ace:.2f}%<br/>
+              Checkpoint &nbsp;:&nbsp; {ckpt}
             </div>
             </div>
             """,

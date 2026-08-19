@@ -129,8 +129,14 @@ def list_available_checkpoints() -> list[dict]:
         if not best.exists():
             continue
         name = sub.name
-        # Guess architecture from folder prefix
-        if name.startswith("resnet50_cbam"):
+        # Guess architecture from folder prefix. Order matters — more specific
+        # prefixes MUST come first so e.g. "mobilenet_fsd_cbam_20260819" is
+        # matched as the mobile variant, not as plain mobilenetv3_large.
+        if name.startswith("mobilenet_fsd_cbam"):
+            arch = "mobilenet_fsd_cbam"
+        elif name.startswith("fsd_cbam_v2_20260810_122231"):
+            arch = "fsd_cbam"
+        elif name.startswith("resnet50_cbam"):
             arch = "resnet50_cbam"
         elif name.startswith("resnet50"):
             arch = "resnet50"

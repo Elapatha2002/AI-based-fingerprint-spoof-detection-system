@@ -1,0 +1,26 @@
+{
+  "tag": "socofing_smoke",
+  "folder": "DataSet\\SOCOFing\\Real",
+  "checkpoint": "D:\\Projects\\University\\Final year Resarch project\\checkpoints\\fsd_cbam_v2_20260810_122231\\best.pth",
+  "model": "fsd_cbam",
+  "threshold": 0.5,
+  "ground_truth": "live",
+  "n_total_found": 100,
+  "n_evaluated": 100,
+  "n_failed": 0,
+  "n_pred_live": 33,
+  "n_pred_spoof": 67,
+  "accuracy_pct": 33.0,
+  "error_metric": "BPCER",
+  "error_value_pct": 67.0,
+  "prob_summary": {
+    "mean": 0.6735468853570497,
+    "median": 0.8939399823572115,
+    "p05": 0.014614256688351581,
+    "p95": 0.9999924505325495,
+    "min": 3.215107892744474e-07,
+    "max": 0.9999992133464717
+  },
+  "elapsed_seconds": 11.119335651397705,
+  "timestamp": "2026-08-14T10:39:36"
+}

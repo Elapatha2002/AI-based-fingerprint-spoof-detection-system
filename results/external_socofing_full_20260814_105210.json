@@ -1,0 +1,26 @@
+{
+  "tag": "socofing_full",
+  "folder": "DataSet\\SOCOFing\\Real",
+  "checkpoint": "D:\\Projects\\University\\Final year Resarch project\\checkpoints\\fsd_cbam_v2_20260810_122231\\best.pth",
+  "model": "fsd_cbam",
+  "threshold": 0.5,
+  "ground_truth": "live",
+  "n_total_found": 6000,
+  "n_evaluated": 6000,
+  "n_failed": 0,
+  "n_pred_live": 1600,
+  "n_pred_spoof": 4400,
+  "accuracy_pct": 26.666666666666668,
+  "error_metric": "BPCER",
+  "error_value_pct": 73.33333333333333,
+  "prob_summary": {
+    "mean": 0.725614171921199,
+    "median": 0.972078038492824,
+    "p05": 0.008807483801292254,
+    "p95": 0.999999332391537,
+    "min": 3.215107892744474e-07,
+    "max": 0.9999999999988618
+  },
+  "elapsed_seconds": 719.9210596084595,
+  "timestamp": "2026-08-14T10:52:10"
+}

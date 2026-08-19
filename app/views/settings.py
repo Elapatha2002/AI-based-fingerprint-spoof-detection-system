@@ -10,8 +10,8 @@ def render():
     if not auth.require_role("super_admin"):
         return
 
-    page_title("Settings — User Management",
-               "Manage examiner accounts. Super-admin only.")
+    page_title("User Management",
+               "Manage examiner accounts.")
 
     tab_users, tab_new, tab_account = st.tabs(
         ["Users", "Add examiner", "My account"]

@@ -4,7 +4,9 @@ import pandas as pd
 from io import BytesIO
 from PIL import Image
 
-from components.cards import page_title, section_header, divider, banner
+from components.cards import (
+    page_title, section_header, divider, banner, empty_state,
+)
 from services import mock_model
 from utils.image_loader import load_image
 
@@ -43,11 +45,14 @@ def render():
             }
 
     if not target:
-        banner("No image to compare. Run an analysis first, or open this view "
-               "from a Single Result page.", kind="info")
-        if st.button("Go to Analyze", type="primary"):
-            st.session_state.current_page = "analyze"
-            st.rerun()
+        empty_state(
+            icon="🔬",
+            message="No image loaded. Run an analysis first, or open this "
+                    "view from a Single Result page.",
+            action_label="Go to Analyse  →",
+            action_page="analyze",
+            key="empty_compare_start",
+        )
         return
 
     # Image picker (if from a batch, allow choosing among batch images)
@@ -152,26 +157,27 @@ def render():
     divider()
 
     section_header("Quantitative comparison")
+    # Only display metrics the pipeline actually computes per-image
+    # (faithfulness, IoU, compute time). Stability across re-runs was
+    # never measured here and used to be hardcoded — that column has
+    # been removed to avoid misleading the reader.
     metrics_df = pd.DataFrame({
-        "Metric": ["Faithfulness (del-AUC)", "Localization (IoU)",
-                   "Compute time", "Stability (rank-corr)"],
+        "Metric": ["Faithfulness (del-AUC)", "Localisation (IoU)",
+                   "Compute time"],
         "Grad-CAM++": [
             f"{xai['gradcam']['faithfulness']:.2f}",
             f"{xai['gradcam']['localization_iou']:.2f}",
             f"{xai['gradcam']['compute_ms']} ms",
-            "0.92",
         ],
         "SHAP": [
             f"{xai['shap']['faithfulness']:.2f}",
             f"{xai['shap']['localization_iou']:.2f}",
             f"{xai['shap']['compute_ms']/1000:.2f} s",
-            "0.88",
         ],
         "LIME": [
             f"{xai['lime']['faithfulness']:.2f}",
             f"{xai['lime']['localization_iou']:.2f}",
             f"{xai['lime']['compute_ms']/1000:.2f} s",
-            "0.74",
         ],
     })
     st.dataframe(metrics_df, use_container_width=True, hide_index=True)
@@ -184,11 +190,12 @@ def render():
 
     st.markdown(
         f"<div style='color:var(--text-secondary);margin-top:12px;line-height:1.7;'>"
-        f"<b>Plain-language summary:</b> On this image, "
-        f"<b>{pretty[best]}</b> shows the highest faithfulness "
-        f"({xai[best]['faithfulness']:.2f}). <b>{pretty[fastest]}</b> is the "
-        f"fastest at {xai[fastest]['compute_ms']} ms. LIME has the lowest "
-        f"stability across re-runs.</div>",
+        f"<b>Plain-language summary:</b> on this image, "
+        f"<b>{pretty[best]}</b> records the highest faithfulness score "
+        f"({xai[best]['faithfulness']:.2f}), while <b>{pretty[fastest]}</b> "
+        f"produces its overlay fastest at {xai[fastest]['compute_ms']} ms. "
+        f"Cross-method aggregate faithfulness statistics are reported "
+        f"in the thesis Section 4.9.</div>",
         unsafe_allow_html=True,
     )
 

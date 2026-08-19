@@ -83,32 +83,20 @@ def _render_single_tab():
     cols = st.columns([1.4, 1])
 
     with cols[0]:
-        st.markdown(
-            "<div class='fsd-section-h'>Upload</div>",
-            unsafe_allow_html=True,
-        )
-        uploaded = st.file_uploader(
-            "Drop image or click to browse",
-            type=["png", "jpg", "jpeg", "bmp", "tif", "tiff"],
-            accept_multiple_files=False,
-            key="single_uploader",
-            label_visibility="collapsed",
-        )
-        st.markdown(
-            "<div class='fsd-mono' style='margin-top:8px;'>"
-            "Accepted: .png .jpg .jpeg .bmp .tif .tiff &nbsp;·&nbsp; Max 10 MB</div>",
-            unsafe_allow_html=True,
+        # Source selector — file upload OR live sensor capture. Both paths
+        # populate the same session_state["single_source_bytes"] / filename
+        # so the Start Analysis button downstream doesn't care which was used.
+        source = st.radio(
+            "Input source",
+            ["📁 Upload image file", "🖐 Capture from Mantra sensor"],
+            horizontal=True,
+            key="single_source",
         )
 
-        if uploaded is not None:
-            uploaded.seek(0)
-            img, err = load_image(uploaded)
-            if err:
-                banner(err, kind="error")
-                return
-            uploaded.seek(0)
-            st.image(img, caption=f"{uploaded.name} · {img.size[0]}×{img.size[1]} px",
-                     width=320)
+        if source.startswith("📁"):
+            _render_file_uploader()
+        else:
+            _render_sensor_capture()
 
     with cols[1]:
         st.markdown(
@@ -118,26 +106,141 @@ def _render_single_tab():
         meta = _render_meta_form("single")
 
         st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
-        ready = uploaded is not None and meta["case_id"] and meta["examiner"]
+
+        # Ready if EITHER source provided image bytes + case_id + examiner
+        source_bytes = st.session_state.get("single_source_bytes")
+        source_filename = st.session_state.get("single_source_filename")
+        ready = (bool(source_bytes)
+                 and bool(meta["case_id"])
+                 and bool(meta["examiner"]))
 
         if st.button("▶  Start Analysis",
                      type="primary",
                      disabled=not ready,
                      use_container_width=True,
                      key="single_start"):
-            uploaded.seek(0)
             st.session_state.current_single = {
-                "filename": uploaded.name,
-                "image_bytes": uploaded.read(),
+                "filename": source_filename or "capture.png",
+                "image_bytes": source_bytes,
                 "meta": meta,
             }
             log_action(
-                action=f"Uploaded image {uploaded.name}",
+                action=f"Started analysis of {source_filename or 'sensor capture'}",
                 case_id=meta.get("case_id", "—"),
-                details=f"sensor={meta.get('sensor')}",
+                details=(f"sensor={meta.get('sensor')}, "
+                         f"source={st.session_state.get('single_source_kind')}"),
             )
             st.session_state.current_page = "single_result"
             st.rerun()
+
+
+def _render_file_uploader():
+    """File-upload source. Populates single_source_bytes and _filename."""
+    st.markdown(
+        "<div class='fsd-section-h'>Upload</div>",
+        unsafe_allow_html=True,
+    )
+    uploaded = st.file_uploader(
+        "Drop image or click to browse",
+        type=["png", "jpg", "jpeg", "bmp", "tif", "tiff"],
+        accept_multiple_files=False,
+        key="single_uploader",
+        label_visibility="collapsed",
+    )
+    st.markdown(
+        "<div class='fsd-mono' style='margin-top:8px;'>"
+        "Accepted: .png .jpg .jpeg .bmp .tif .tiff &nbsp;·&nbsp; Max 10 MB</div>",
+        unsafe_allow_html=True,
+    )
+
+    if uploaded is not None:
+        uploaded.seek(0)
+        img, err = load_image(uploaded)
+        if err:
+            banner(err, kind="error")
+            st.session_state["single_source_bytes"] = None
+            return
+        uploaded.seek(0)
+        image_bytes = uploaded.read()
+
+        st.image(img,
+                 caption=f"{uploaded.name} · {img.size[0]}×{img.size[1]} px",
+                 width=320)
+
+        st.session_state["single_source_bytes"] = image_bytes
+        st.session_state["single_source_filename"] = uploaded.name
+        st.session_state["single_source_kind"] = "file_upload"
+    else:
+        # Clear stale bytes if the user removed the file
+        if st.session_state.get("single_source_kind") == "file_upload":
+            st.session_state["single_source_bytes"] = None
+            st.session_state["single_source_filename"] = None
+
+
+def _render_sensor_capture():
+    """Live-sensor source. Populates single_source_bytes and _filename."""
+    from app.services.mantra_sensor import (
+        capture_fingerprint, is_available, MantraSensorError,
+    )
+
+    st.markdown(
+        "<div class='fsd-section-h'>Capture from Mantra MFS100</div>",
+        unsafe_allow_html=True,
+    )
+
+    ok, _ = is_available()
+    if ok:
+        st.markdown(
+            "<div class='fsd-mono' style='font-size:12px;margin-bottom:12px;'>"
+            "<span style='color:var(--accent-live);'>● Sensor ready</span>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            "<div class='fsd-mono' style='font-size:12px;margin-bottom:12px;'>"
+            "<span style='color:var(--accent-spoof);'>● Sensor not detected</span>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        banner(
+            "Connect the Mantra MFS100 device to a USB port and reload the page.",
+            kind="warn",
+        )
+        return
+
+    if st.button("🖐  Capture fingerprint",
+                  type="primary",
+                  use_container_width=True,
+                  key="single_capture_btn"):
+        try:
+            with st.spinner("Waiting for finger on sensor..."):
+                result = capture_fingerprint()
+
+            filename = f"sensor_{result.captured_at.replace(':', '-')}.png"
+            st.session_state["single_source_bytes"] = result.image_bytes
+            st.session_state["single_source_filename"] = filename
+            st.session_state["single_source_kind"] = "sensor_capture"
+            st.session_state["single_last_capture_info"] = {
+                "width": result.width,
+                "height": result.height,
+                "dpi": result.dpi,
+                "quality": result.quality,
+                "captured_at": result.captured_at,
+            }
+        except MantraSensorError as e:
+            banner(f"Capture failed: {e}", kind="error")
+
+    if (st.session_state.get("single_source_kind") == "sensor_capture"
+            and st.session_state.get("single_source_bytes")):
+        from PIL import Image
+        from io import BytesIO
+        img = Image.open(BytesIO(st.session_state["single_source_bytes"]))
+        info = st.session_state.get("single_last_capture_info", {})
+        cap = (f"{info.get('width', '?')}×{info.get('height', '?')} px "
+               f"@ {info.get('dpi', '?')} DPI · quality "
+               f"{info.get('quality', '—')}")
+        st.image(img, caption=cap, width=320)
 
 
 def _render_batch_tab():

@@ -15,6 +15,7 @@ from src.models.resnet import build_resnet50
 from src.models.resnet_cbam import build_resnet50_cbam
 from src.models.resnet_fsd_cbam import build_resnet50_fsd_cbam
 from src.models.mobilenet import build_mobilenetv3
+from src.models.mobilenet_fsd_cbam import build_mobilenetv3_fsd_cbam
 
 
 def _resnet50(**kw):
@@ -50,6 +51,14 @@ def _mobilenetv3_large(**kw):
     )
 
 
+def _mobilenet_fsd_cbam(**kw):
+    return build_mobilenetv3_fsd_cbam(
+        pretrained=kw.get("pretrained", True),
+        freeze_backbone=kw.get("freeze_backbone", False),
+        reduction_ratios=kw.get("reduction_ratios", (8, 16)),
+    )
+
+
 def _mobilenetv3_small(**kw):
     return build_mobilenetv3(
         pretrained=kw.get("pretrained", True),
@@ -62,6 +71,7 @@ MODEL_REGISTRY = {
     "resnet50": _resnet50,
     "resnet50_cbam": _resnet50_cbam,
     "fsd_cbam": _fsd_cbam,
+    "mobilenet_fsd_cbam": _mobilenet_fsd_cbam,
     "mobilenetv3_large": _mobilenetv3_large,
     "mobilenetv3_small": _mobilenetv3_small,
 }

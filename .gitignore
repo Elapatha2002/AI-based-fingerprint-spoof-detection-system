@@ -1,5 +1,6 @@
 DataSet/
 results/xai_gallery/*
+Documents/
 
 # Secrets — NEVER commit
 .env
