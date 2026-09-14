@@ -33,7 +33,8 @@ MODELS = [
     ("ResNet50+CBAM",    26.0, 6.61, "#ff7f0e", False),
     ("MobileNetV3-L",     4.2, 4.60, "#2ca02c", True),
     ("FSD-CBAM v1",      31.8, 6.35, "#d62728", False),
-    ("FSD-CBAM v2\n(novel)", 28.5, 4.60, "#9467bd", True),
+    ("FSD-CBAM v2\n(novel · RN50)", 28.5, 4.60, "#9467bd", True),
+    ("Mobile-FSD-CBAM\n(novel · MobileNet)", 4.24, 5.57, "#17becf", False),
 ]
 
 
@@ -189,15 +190,16 @@ def fig_rq_alignment():
           ("Ch 5.7 Daubert / Frye discussion",   "answered"),
           ("Ch 4.11 external-validation disclosure", "answered")]),
 
-        ("RQ4", "How do practitioners perceive\nthe XAI-augmented PAD system?",
+        ("RQ4", "How do stakeholders perceive\nthe XAI-augmented PAD system?",
          [("Ch 1 / Ch 3.4.1 public perception (n=86)", "answered"),
-          ("Ch 5.8 public survey reflection",   "answered"),
-          ("Practitioner survey (Oct 2026)",    "pending")]),
+          ("Ch 5.8 public survey reflection",       "answered"),
+          ("Practitioner-specific study (future)",  "future")]),
     ]
 
     status_colour = {"answered": "#8fce8f",
                      "partial":  "#ffe082",
-                     "pending":  "#f28b82"}
+                     "pending":  "#f28b82",
+                     "future":   "#c5cae9"}
 
     fig, ax = plt.subplots(figsize=(13, 8), dpi=DPI)
 
@@ -227,11 +229,11 @@ def fig_rq_alignment():
             ax.add_patch(rect)
             ax.text(ex + col_w * 0.45, y + 0.62, evid_text,
                      fontsize=9, ha="center", va="center", color="#111")
+            colour_map = {"answered": "#1a4d1a", "partial": "#8a6d1a",
+                          "pending": "#7a1a1a", "future": "#3949ab"}
             ax.text(ex + col_w * 0.45, y + 0.25, status.upper(),
                      fontsize=9, fontweight="bold", ha="center", va="center",
-                     color="#1a4d1a" if status == "answered"
-                            else "#8a6d1a" if status == "partial"
-                            else "#7a1a1a")
+                     color=colour_map.get(status, "#333"))
 
     ax.set_xlim(-0.2, x_evid + ncols * col_w + 0.2)
     ax.set_ylim(-0.5, len(rqs) + 0.4)
@@ -240,7 +242,7 @@ def fig_rq_alignment():
     # Legend
     for k, (label, colour) in enumerate([("Answered", "#8fce8f"),
                                           ("Partial",  "#ffe082"),
-                                          ("Pending",  "#f28b82")]):
+                                          ("Future work", "#c5cae9")]):
         rect = Rectangle((k * 2.5, -0.35), 0.4, 0.25,
                           facecolor=colour, edgecolor="black")
         ax.add_patch(rect)

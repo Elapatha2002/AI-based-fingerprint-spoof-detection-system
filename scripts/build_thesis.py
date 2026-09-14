@@ -1,14 +1,20 @@
 """
-Build Thesis_Chapters_1-5.docx from structured content.
+Build Thesis_Final.docx from structured content.
 
 Generates a single Microsoft Word document containing:
   • Title page
-  • Table of Contents (auto-populated on first open in Word)
+  • Abstract
+  • Acknowledgements
+  • List of Abbreviations
+  • Table of Contents  (auto-populated on first open in Word)
+  • List of Figures    (auto-populated on first open in Word)
+  • List of Tables     (auto-populated on first open in Word)
   • Chapter 1 — Introduction
   • Chapter 2 — Literature Review
-  • Chapter 3 — Methodology (Progress Update)
+  • Chapter 3 — Methodology
   • Chapter 4 — Results and Implementation
   • Chapter 5 — Discussion
+  • Chapter 6 — Conclusion
   • References
 
 Page numbers appear in the footer of every page. Formal academic
@@ -25,7 +31,7 @@ from docx.oxml import OxmlElement
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = PROJECT_ROOT / "Thesis_Chapters_1-5.docx"
+OUTPUT = PROJECT_ROOT / "Thesis_Final.docx"
 FIGURES_DIR = PROJECT_ROOT / "assets" / "figures"
 
 
@@ -69,9 +75,9 @@ def add_title_page(doc: Document) -> None:
     doc.add_paragraph()
 
     for line, italic, bold in [
-        ("Interim Submission 02 — Chapters 1, 2, 3, 4 and 5", True, False),
+        ("A dissertation submitted", True, False),
         ("", False, False),
-        ("presented to the Faculty of Computing", False, False),
+        ("to the Faculty of Computing", False, False),
         ("NSBM Green University", False, False),
         ("in partial fulfilment of the requirements for the degree of", False, False),
         ("BSc (Hons) Software Engineering", False, False),
@@ -111,7 +117,7 @@ def add_title_page(doc: Document) -> None:
         doc.add_paragraph()
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p.add_run("June 2026")
+    p.add_run("September 2026")
 
     doc.add_page_break()
 
@@ -239,8 +245,74 @@ def render_blocks(doc: Document, blocks) -> None:
 # ─────────────────────────────────────────────────────────────────────
 
 from chapter_content import (
-    CHAPTER_1, CHAPTER_2, CHAPTER_3, CHAPTER_4, CHAPTER_5, REFERENCES,
+    ABSTRACT, ACKNOWLEDGEMENTS, ABBREVIATIONS,
+    CHAPTER_1, CHAPTER_2, CHAPTER_3, CHAPTER_4, CHAPTER_5, CHAPTER_6,
+    REFERENCES,
 )
+
+
+def _add_field_page(doc: Document, title: str, instr_text: str,
+                     placeholder: str) -> None:
+    """Generic helper that drops a Word field on its own page. Used for
+    Table of Contents, List of Figures, and List of Tables — all three
+    are Word field codes that behave identically."""
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = p.add_run(title)
+    r.bold = True
+    r.font.size = Pt(18)
+
+    doc.add_paragraph()  # spacer
+
+    p = doc.add_paragraph()
+    run = p.add_run()
+
+    fld_begin = OxmlElement("w:fldChar")
+    fld_begin.set(qn("w:fldCharType"), "begin")
+
+    instr = OxmlElement("w:instrText")
+    instr.set(qn("xml:space"), "preserve")
+    instr.text = instr_text
+
+    fld_sep = OxmlElement("w:fldChar")
+    fld_sep.set(qn("w:fldCharType"), "separate")
+
+    ph = OxmlElement("w:t")
+    ph.text = placeholder
+
+    fld_end = OxmlElement("w:fldChar")
+    fld_end.set(qn("w:fldCharType"), "end")
+
+    run._r.append(fld_begin)
+    run._r.append(instr)
+    run._r.append(fld_sep)
+    run._r.append(ph)
+    run._r.append(fld_end)
+
+    doc.add_page_break()
+
+
+def add_list_of_figures(doc: Document) -> None:
+    """Word field that lists every 'Figure X.Y: ...' caption once refreshed."""
+    _add_field_page(
+        doc,
+        title="List of Figures",
+        # \h = hyperlinks, \z = suppress web-view tab leaders, \c "Figure" = filter
+        instr_text='TOC \\h \\z \\c "Figure"',
+        placeholder=("[Right-click here and choose 'Update Field' in Word "
+                     "to populate the list of figures.]"),
+    )
+
+
+def add_list_of_tables(doc: Document) -> None:
+    """Word field that lists every 'Table X.Y: ...' caption once refreshed."""
+    _add_field_page(
+        doc,
+        title="List of Tables",
+        instr_text='TOC \\h \\z \\c "Table"',
+        placeholder=("[Right-click here and choose 'Update Field' in Word "
+                     "to populate the list of tables.]"),
+    )
 
 
 def add_table_of_contents(doc: Document) -> None:
@@ -326,13 +398,22 @@ def main():
     doc = Document()
     setup_styles(doc)
 
+    # Front matter — order matches typical NSBM submission layout
     add_title_page(doc)
+    render_blocks(doc, ABSTRACT)
+    render_blocks(doc, ACKNOWLEDGEMENTS)
+    render_blocks(doc, ABBREVIATIONS)
     add_table_of_contents(doc)
+    add_list_of_figures(doc)
+    add_list_of_tables(doc)
 
-    for chapter in (CHAPTER_1, CHAPTER_2, CHAPTER_3, CHAPTER_4, CHAPTER_5):
+    # Main matter — one chapter per page-break
+    for chapter in (CHAPTER_1, CHAPTER_2, CHAPTER_3,
+                    CHAPTER_4, CHAPTER_5, CHAPTER_6):
         render_blocks(doc, chapter)
         doc.add_page_break()
 
+    # Back matter
     render_blocks(doc, REFERENCES)
 
     add_page_numbers(doc)

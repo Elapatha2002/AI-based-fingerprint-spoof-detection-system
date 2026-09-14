@@ -1,7 +1,9 @@
 DataSet/
 results/xai_gallery/*
 Documents/
-
+.claude/
+assets/figures/
+scripts/
 # Secrets — NEVER commit
 .env
 .env.*

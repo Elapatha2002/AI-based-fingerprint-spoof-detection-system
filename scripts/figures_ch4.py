@@ -38,27 +38,30 @@ DPI = 180
 
 # ── Colour palette (colour-blind friendly, print-safe) ───────────────
 PALETTE = {
-    "resnet50":          "#1f77b4",  # blue
-    "resnet50_cbam":     "#ff7f0e",  # orange
-    "mobilenetv3_large": "#2ca02c",  # green
-    "fsd_cbam_v1":       "#d62728",  # red
-    "fsd_cbam_v2":       "#9467bd",  # purple (novel model — highlight)
+    "resnet50":           "#1f77b4",  # blue
+    "resnet50_cbam":      "#ff7f0e",  # orange
+    "mobilenetv3_large":  "#2ca02c",  # green
+    "fsd_cbam_v1":        "#d62728",  # red
+    "fsd_cbam_v2":        "#9467bd",  # purple (novel — ResNet50 backbone)
+    "mobile_fsd_cbam_v1": "#17becf",  # teal (novel — MobileNet backbone)
 }
 LABELS = {
-    "resnet50":          "ResNet50V2",
-    "resnet50_cbam":     "ResNet50+CBAM",
-    "mobilenetv3_large": "MobileNetV3-L",
-    "fsd_cbam_v1":       "FSD-CBAM v1",
-    "fsd_cbam_v2":       "FSD-CBAM v2\n(novel)",
+    "resnet50":           "ResNet50V2",
+    "resnet50_cbam":      "ResNet50+CBAM",
+    "mobilenetv3_large":  "MobileNetV3-L",
+    "fsd_cbam_v1":        "FSD-CBAM v1",
+    "fsd_cbam_v2":        "FSD-CBAM v2\n(novel · RN50)",
+    "mobile_fsd_cbam_v1": "Mobile-FSD-CBAM v1\n(novel · MobileNet)",
 }
 
 # ── Test-metrics JSON files ──────────────────────────────────────────
 METRICS_FILES = {
-    "resnet50":          "resnet50_20260612_102208_test_metrics.json",
-    "resnet50_cbam":     "resnet50_cbam_20260612_145118_test_metrics.json",
-    "mobilenetv3_large": "mobilenetv3_large_20260616_105902_test_metrics.json",
-    "fsd_cbam_v1":       "fsd_cbam_20260708_144619_test_metrics.json",
-    "fsd_cbam_v2":       "fsd_cbam_v2_20260810_122231_test_metrics.json",
+    "resnet50":           "resnet50_20260612_102208_test_metrics.json",
+    "resnet50_cbam":      "resnet50_cbam_20260612_145118_test_metrics.json",
+    "mobilenetv3_large":  "mobilenetv3_large_20260616_105902_test_metrics.json",
+    "fsd_cbam_v1":        "fsd_cbam_20260708_144619_test_metrics.json",
+    "fsd_cbam_v2":        "fsd_cbam_v2_20260810_122231_test_metrics.json",
+    "mobile_fsd_cbam_v1": "mobilenet_fsd_cbam_v1_20260820_002008_test_metrics.json",
 }
 
 # Cross-eval per-sensor CSVs (v2 not yet generated — use v1 as placeholder)
@@ -86,7 +89,7 @@ def load_metrics() -> dict[str, dict]:
 def fig_model_comparison():
     m = load_metrics()
     keys = ["resnet50", "resnet50_cbam", "mobilenetv3_large",
-            "fsd_cbam_v1", "fsd_cbam_v2"]
+            "fsd_cbam_v1", "fsd_cbam_v2", "mobile_fsd_cbam_v1"]
 
     metrics = [
         ("AUC (higher is better)", "roc_auc",  1.0,   False),
@@ -129,7 +132,7 @@ def fig_model_comparison():
         else:
             ax.set_ylim(vmin * 0.985, vmax * 1.015)
 
-    fig.suptitle("Figure 4.1  |  Test-set metrics across the five backbones "
+    fig.suptitle("Figure 4.1  |  Test-set metrics across the six backbones "
                  "(bold outline = best)", fontsize=12, fontweight="bold", y=1.00)
     fig.tight_layout()
     out = FIG_OUT / "ch4_model_comparison.png"
