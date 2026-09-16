@@ -6,66 +6,66 @@ from components.cards import feature_card
 def render():
     st.markdown(
         """
-        <div class="fsd-hero">
-          <div class="fsd-hero-title">Explainable Fingerprint Spoof Detection<br/>
-            <span style="color:var(--text-secondary);font-size:24px;">
-              for Digital Forensics
-            </span>
+        <section class="fsd-home-hero">
+          <div class="fsd-home-eyebrow">Research decision-support workspace</div>
+          <div class="fsd-home-title">Explainable fingerprint<br/>spoof detection</div>
+          <div class="fsd-home-subtitle">
+            Analyze a fingerprint, inspect the evidence behind the outcome,
+            and prepare a traceable case record in one guided workflow.
           </div>
-          <div class="fsd-hero-sub">
-            Detect silicone, gelatin, and latex spoofs with court-ready visual
-            explanations powered by Grad-CAM++, SHAP, and LIME.
+          <div class="fsd-home-proof">
+            Human review remains essential: this research prototype supports,
+            but does not replace, forensic judgement.
           </div>
-        </div>
+        </section>
         """,
         unsafe_allow_html=True,
     )
 
-    # Symmetric layout: spacer | btn | btn | spacer  →  buttons are
-    # truly centered and identical width regardless of label length.
-    c1, c2, c3, c4 = st.columns([2.5, 1.4, 1.4, 2.5])
-    with c2:
-        if st.button("▶  Start Analysis",
+    _, c_start, c_method, _ = st.columns([1.5, 1.4, 1.4, 1.5])
+    with c_start:
+        if st.button("Analyze a fingerprint",
                      type="primary",
-                     use_container_width=True,
+                     width="stretch",
                      key="home_start"):
             st.session_state.current_page = "analyze"
             st.rerun()
-    with c3:
-        if st.button("📖  Methodology",
-                     use_container_width=True,
+    with c_method:
+        if st.button("Review methodology",
+                     width="stretch",
                      key="home_methodology"):
             st.session_state.current_page = "about"
             st.rerun()
 
-    st.markdown("<div style='height:48px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='fsd-section-h'>How the workflow supports your case</div>",
+                unsafe_allow_html=True)
 
     cols = st.columns(3)
     with cols[0]:
         feature_card(
-            "🛡",
-            "Spoof Detection",
-            "Novel FSD-CBAM v2 attention module. 99.19% AUC and best-of-class "
-            "5.87% attack error rate on the LivDet 2009-2015 test partition.",
+            "01",
+            "Analyze the sample",
+            "Upload one fingerprint image or a batch archive, then record the "
+            "case identifier, sensor, and contextual notes before processing.",
         )
     with cols[1]:
         feature_card(
-            "🔬",
-            "Forensic XAI",
-            "Three explanation methods rendered side-by-side: Grad-CAM++, "
-            "SHAP, and LIME — with quantitative faithfulness scores.",
+            "02",
+            "Review the evidence",
+            "Compare the predicted outcome with Grad-CAM++, SHAP, and LIME "
+            "visual explanations and their measured faithfulness indicators.",
         )
     with cols[2]:
         feature_card(
-            "📑",
-            "Court-ready Reports",
-            "PDF reports aligned to Daubert/Frye admissibility criteria, "
-            "including model provenance and reproducibility metadata.",
+            "03",
+            "Document the decision",
+            "Save the analysis and generate a report containing the case "
+            "context, model provenance, result, and explanatory images.",
         )
 
     st.markdown(
-        "<div style='text-align:center;margin-top:32px;color:var(--text-muted);"
-        "font-size:12px;'>Trained on LivDet 2009 · 2011 · 2013 · 2015 &nbsp;·&nbsp; "
-        "9 sensors &nbsp;·&nbsp; 65,267 images</div>",
+        "<div class='fsd-home-proof'>"
+        "Training and methodological details, limitations, and model metrics are available in Methodology."
+        "</div>",
         unsafe_allow_html=True,
     )

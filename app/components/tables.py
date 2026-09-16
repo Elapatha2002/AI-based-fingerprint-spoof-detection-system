@@ -44,7 +44,7 @@ def results_table(results: list[dict], filter_verdict: str = "All",
     cols = ["#", "Filename", "Verdict", "Confidence", "NFIQ2", "Material", "Anomaly"]
     st.dataframe(
         display[cols],
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         height=min(420, 60 + 35 * len(display)),
         column_config={
@@ -75,5 +75,5 @@ def history_table(history: list[dict]) -> pd.DataFrame:
             "Status": h.get("status", "Done"),
         })
     df = pd.DataFrame(rows)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)
     return df

@@ -2,6 +2,7 @@
 import streamlit as st
 
 from components.cards import page_title, banner
+from components.model_picker import render_model_picker
 from components.audit import log_action
 from app.services import auth, database
 
@@ -10,11 +11,11 @@ def render():
     if not auth.require_role("super_admin"):
         return
 
-    page_title("User Management",
-               "Manage examiner accounts.")
+    page_title("User management",
+               "Create, review, and manage access for forensic examiners.")
 
-    tab_users, tab_new, tab_account = st.tabs(
-        ["Users", "Add examiner", "My account"]
+    tab_users, tab_new, tab_model, tab_account = st.tabs(
+        ["Users", "Add examiner", "Model configuration", "My account"]
     )
 
     with tab_users:
@@ -22,6 +23,17 @@ def render():
 
     with tab_new:
         _render_add_user_form()
+
+    with tab_model:
+        st.markdown(
+            "<div class='fsd-section-h'>Active model configuration</div>",
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "Changing the model affects new analyses only. Record the selected "
+            "model and checkpoint in the case record before use."
+        )
+        render_model_picker()
 
     with tab_account:
         _render_my_account()
@@ -86,22 +98,48 @@ def _render_user_list():
 
             with top[4]:
                 key = f"edit_{u['user_id']}"
-                if st.button("Edit", key=key, use_container_width=True):
+                if st.button("Edit", key=key, width="stretch"):
                     st.session_state[f"editing_{u['user_id']}"] = True
 
             with top[5]:
-                # Toggle active
+                # Deactivation is consequential. Require an explicit second
+                # click and offer a clear exit rather than disabling an
+                # account immediately from a list row.
                 new_active = 0 if u["active"] else 1
                 verb = "Disable" if u["active"] else "Enable"
                 disabled = is_self or (u["active"] and is_last_admin)
-                if st.button(verb, key=f"toggle_{u['user_id']}",
-                              use_container_width=True, disabled=disabled):
-                    database.update_user(u["user_id"], active=new_active)
-                    log_action(
-                        action=f"{verb}d user {u['username']}",
-                        details=f"role={u['role']}",
+                confirm_key = f"confirm_toggle_{u['user_id']}"
+                awaiting_confirmation = bool(st.session_state.get(confirm_key))
+                button_label = (
+                    "Confirm disable" if u["active"] and awaiting_confirmation
+                    else verb
+                )
+                if st.button(button_label, key=f"toggle_{u['user_id']}",
+                              width="stretch", disabled=disabled):
+                    if u["active"] and not awaiting_confirmation:
+                        st.session_state[confirm_key] = True
+                        st.rerun()
+                    else:
+                        database.update_user(u["user_id"], active=new_active)
+                        log_action(
+                            action=f"{verb}d user {u['username']}",
+                            details=f"role={u['role']}",
+                        )
+                        st.session_state.pop(confirm_key, None)
+                        st.rerun()
+
+            if u["active"] and st.session_state.get(
+                    f"confirm_toggle_{u['user_id']}"):
+                notice_col, cancel_col, _ = st.columns([3, 1, 2])
+                with notice_col:
+                    st.warning(
+                        f"Disable {u['full_name']}? They will not be able to sign in."
                     )
-                    st.rerun()
+                with cancel_col:
+                    if st.button("Cancel", key=f"cancel_toggle_{u['user_id']}",
+                                 width="stretch"):
+                        st.session_state.pop(f"confirm_toggle_{u['user_id']}", None)
+                        st.rerun()
 
             # Inline edit panel
             if st.session_state.get(f"editing_{u['user_id']}"):
@@ -160,7 +198,7 @@ def _render_edit_panel(u: dict, *, is_last_admin: bool, is_self: bool):
     save, cancel = st.columns([1, 1])
     with save:
         if st.button("Save changes", type="primary",
-                      key=f"sv_{u['user_id']}", use_container_width=True):
+                      key=f"sv_{u['user_id']}", width="stretch"):
             updates = {}
             if new_full_name.strip() and new_full_name != u["full_name"]:
                 updates["full_name"] = new_full_name.strip()
@@ -192,7 +230,7 @@ def _render_edit_panel(u: dict, *, is_last_admin: bool, is_self: bool):
 
     with cancel:
         if st.button("Cancel", key=f"cn_{u['user_id']}",
-                      use_container_width=True):
+                      width="stretch"):
             st.session_state[f"editing_{u['user_id']}"] = False
             st.rerun()
 
@@ -235,7 +273,7 @@ def _render_add_user_form():
             )
 
         submitted = st.form_submit_button(
-            "Create account", type="primary", use_container_width=True,
+            "Create account", type="primary", width="stretch",
         )
 
         if submitted:

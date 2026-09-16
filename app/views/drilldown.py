@@ -20,7 +20,7 @@ def render():
     # Breadcrumb / back row
     cols = st.columns([1, 4, 1, 1, 1])
     with cols[0]:
-        if st.button("◀ Back", use_container_width=True, key="dd_back"):
+        if st.button("◀ Back", width="stretch", key="dd_back"):
             st.session_state.current_page = "batch_dashboard"
             st.rerun()
     with cols[1]:
@@ -37,12 +37,12 @@ def render():
         )
     with cols[3]:
         if st.button("◀ Prev", disabled=idx == 0,
-                     use_container_width=True, key="dd_prev"):
+                     width="stretch", key="dd_prev"):
             st.session_state.drilldown_idx = idx - 1
             st.rerun()
     with cols[4]:
         if st.button("Next ▶", disabled=idx >= len(filtered) - 1,
-                     use_container_width=True, key="dd_next"):
+                     width="stretch", key="dd_next"):
             st.session_state.drilldown_idx = idx + 1
             st.rerun()
 

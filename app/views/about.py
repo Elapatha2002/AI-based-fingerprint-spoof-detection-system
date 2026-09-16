@@ -4,8 +4,7 @@ import os
 from pathlib import Path
 
 import streamlit as st
-from components.cards import page_title, section_header, divider
-from components.model_picker import render_model_picker
+from components.cards import page_title, section_header, divider, banner
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -59,13 +58,14 @@ def _resolve_model_card() -> tuple[float, float, float, float, float, str, str]:
 
 
 def render():
-    page_title("About / Methodology",
-               "How this system works, what it was trained on, and what it cannot do.")
+    page_title("Methodology and limitations",
+               "Understand the evidence, model basis, and limits before relying on an output.")
 
-    # Model picker (real mode only)
-    section_header("Active Model")
-    render_model_picker()
-    divider()
+    banner(
+        "Research decision-support only. A qualified examiner must review the "
+        "input, predicted outcome, and visual explanations before a forensic decision.",
+        kind="warn",
+    )
 
     cols = st.columns([1, 3])
 
@@ -73,16 +73,14 @@ def render():
         st.markdown(
             """
             <div class='fsd-card' style='position:sticky;top:80px;'>
-              <div class='fsd-section-h' style='margin:0 0 8px 0;'>On this page</div>
-              <div class='fsd-mono' style='font-size:12px;line-height:2;'>
-                • Overview<br/>
-                • How it works<br/>
-                • Datasets<br/>
-                • Model<br/>
-                • XAI methods<br/>
-                • Limitations<br/>
-                • Admissibility<br/>
-                • References
+              <div class='fsd-section-h' style='margin:0 0 8px 0;'>Use outputs responsibly</div>
+              <div style='font-size:13px;color:var(--text-secondary);line-height:1.65;'>
+                <b>1. Check image quality</b> before interpreting a result.<br/><br/>
+                <b>2. Review all XAI views</b>; an overlay is supporting evidence,
+                not independent proof.<br/><br/>
+                <b>3. Record context</b> such as the sensor and examiner in the
+                case record.<br/><br/>
+                <b>4. Use professional judgement</b> for every conclusion.
               </div>
             </div>
             """,

@@ -1,4 +1,5 @@
-"""Top navigation bar and bottom status bar."""
+"""Application navigation and a compact operational-status footer."""
+from html import escape
 import os
 import streamlit as st
 
@@ -18,19 +19,14 @@ ADMIN_NAV = [
 
 
 def render_nav():
-    """Top nav — link-style buttons CENTERED horizontally.
+    """Render a responsive, labelled application header and navigation.
 
-    Composition depends on the current user's role. The version pill sits
-    fixed top-right; the sign-out control is rendered inline at the far
-    right of the nav row.
+    The former navigation used a set of narrow fractional columns.  It made
+    labels wrap on ordinary laptop/desktop widths and left users without a
+    clear product or account context.  ``st.pills`` provides a single,
+    keyboard-operable navigation group whose selected state is explicit.
     """
-    # Fixed-position version pill
-    st.markdown(
-        "<div class='fsd-nav-version-pill'>v1.0.0</div>",
-        unsafe_allow_html=True,
-    )
-
-    # Lazy import to avoid a circular dep with streamlit_app.py
+    # Lazy import avoids a circular dependency with streamlit_app.py.
     from app.services import auth
     user = auth.current_user()
 
@@ -39,53 +35,87 @@ def render_nav():
         items = items + list(ADMIN_NAV)
 
     current = st.session_state.get("current_page", "home")
+    labels_to_pages = {label: page_key for page_key, label in items}
+    active_label = next(
+        (label for page_key, label in items if page_key == current), "Home"
+    )
 
-    # Symmetric layout: [left spacer] [nav items ...] [user/logout] [right spacer]
-    n = len(items)
-    # Slightly wider right column so full name + Sign out fit comfortably.
-    ratios = [2] + [0.9] * n + [2.5] + [1.5]
-    cols = st.columns(ratios)
-
-    for i, (page_key, label) in enumerate(items, start=1):
-        with cols[i]:
-            label_display = f"**{label}**" if current == page_key else label
-            if st.button(label_display,
-                         key=f"nav_{page_key}",
-                         use_container_width=True):
-                st.session_state.current_page = page_key
-                st.rerun()
-
-    # User identity + sign out at the far right
-    with cols[-2]:
+    # Product and account context are intentionally separated from the
+    # navigation choices. It reduces scanning effort and prevents the account
+    # controls from being mistaken for another page tab.
+    brand_col, account_col = st.columns([3, 2])
+    with brand_col:
+        st.markdown(
+            """
+            <div class='fsd-app-brand'>
+              <span class='fsd-brand-mark' aria-hidden='true'>F</span>
+              <div>
+                <div class='fsd-brand-name'>FSD-XAI</div>
+                <div class='fsd-brand-context'>Forensic spoof detection workspace</div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with account_col:
         if user:
-            role_label = ("Super Admin" if user["role"] == "super_admin"
-                          else "Examiner")
+            role_label = ("Super administrator" if user["role"] == "super_admin"
+                          else "Forensic examiner")
             st.markdown(
-                f"<div style='text-align:right;padding-top:6px;'>"
-                f"<div style='font-size:13px;font-weight:600;color:var(--text-primary);'>"
-                f"{user['full_name']}</div>"
-                f"<div style='font-size:11px;color:var(--text-muted);'>"
-                f"{role_label}</div></div>",
+                "<div class='fsd-account-summary'>"
+                f"<span class='fsd-account-name'>{escape(user['full_name'])}</span>"
+                f"<span class='fsd-account-role'>{role_label}</span>"
+                "</div>",
                 unsafe_allow_html=True,
             )
 
-    with cols[-1]:
+    nav_col, signout_col = st.columns([5, 1])
+    with nav_col:
+        # Synchronise when navigation happens from a CTA elsewhere in the app,
+        # but do not overwrite a user selection during the pills' change run.
+        if st.session_state.get("_nav_synced_page") != current:
+            st.session_state["main_navigation"] = active_label
+            st.session_state["_nav_synced_page"] = current
+
+        selected = st.pills(
+            "Primary navigation",
+            list(labels_to_pages),
+            selection_mode="single",
+            key="main_navigation",
+            label_visibility="collapsed",
+        )
+        target = labels_to_pages.get(selected)
+        if target and target != current:
+            st.session_state.current_page = target
+            st.session_state["_nav_synced_page"] = target
+            st.rerun()
+
+    with signout_col:
         if user and st.button("Sign out", key="nav_signout",
-                                use_container_width=True):
+                              width="stretch"):
             auth.logout()
             st.session_state.current_page = "home"
+            st.session_state.pop("main_navigation", None)
+            st.session_state.pop("_nav_synced_page", None)
             st.rerun()
 
 
 def render_statusbar():
-    """Bottom status bar v2 — chip-based, shows live model + thresholds + audit count.
+    """Render a non-obstructive operational footer.
 
-    Auto-detects whether the app is in mock mode (default) or real mode
-    (FSDXAI_REAL_MODEL=1). In real mode, the model + commit + device chips
-    show the actual loaded checkpoint. Status bar is glanceable — every chip
-    communicates a single piece of state.
+    This is deliberately in normal document flow instead of a fixed bar: a
+    fixed status bar covered actions and competed with the case workflow.
     """
     chips: list[str] = []
+    try:
+        from app.services import auth, storage
+        if auth.offline_mode_enabled():
+            chips.append("<span class='fsd-chip fsd-chip-warn'>● LOCAL OFFLINE MODE</span>")
+        elif isinstance(storage.get_storage(), storage.LocalStorageService):
+            chips.append("<span class='fsd-chip fsd-chip-warn'>● LOCAL STORAGE</span>")
+    except Exception:
+        pass
+
     if os.environ.get("FSDXAI_REAL_MODEL") == "1":
         try:
             from services.real_model import get_service_info
@@ -93,9 +123,7 @@ def render_statusbar():
             chips.append(f"<span class='fsd-chip fsd-chip-info'>⚙ {svc['name']}</span>")
             chips.append(f"<span class='fsd-chip fsd-chip-muted'>commit {svc['commit']}</span>")
             chips.append(f"<span class='fsd-chip fsd-chip-muted'>{svc['device']}</span>")
-            chips.append(
-                "<span class='fsd-chip fsd-chip-success'>● LIVE inference</span>"
-            )
+            chips.append("<span class='fsd-chip fsd-chip-success'>● real model</span>")
         except Exception as e:
             chips.append(
                 f"<span class='fsd-chip fsd-chip-spoof'>● real-model error</span>"
@@ -106,7 +134,7 @@ def render_statusbar():
     else:
         chips.append("<span class='fsd-chip fsd-chip-info'>⚙ mobilenetv3_large</span>")
         chips.append("<span class='fsd-chip fsd-chip-muted'>commit a3f9b21</span>")
-        chips.append("<span class='fsd-chip fsd-chip-warn'>● MOCK predictions</span>")
+        chips.append("<span class='fsd-chip fsd-chip-warn'>● demonstration model</span>")
 
     chips.append("<span class='fsd-status-spacer'></span>")
 

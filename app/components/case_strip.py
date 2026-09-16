@@ -2,6 +2,8 @@
 report / batch-dashboard pages. Mirrors the look of enterprise forensic
 platforms — Case ID is the primary anchor, status + examiner give context
 at a glance."""
+from html import escape
+
 import streamlit as st
 
 
@@ -27,10 +29,11 @@ def render_case_strip(meta: dict,
     status = status or st.session_state.get("case_status", "Open")
     color = STATUS_COLORS.get(status, "#8B949E")
 
-    case_id = meta.get("case_id", "—")
-    examiner = meta.get("examiner", "—")
-    sensor = meta.get("sensor", "—")
-    ts = (meta.get("timestamp") or "")[:16] or "—"
+    case_id = escape(str(meta.get("case_id", "—")))
+    examiner = escape(str(meta.get("examiner", "—")))
+    sensor = escape(str(meta.get("sensor", "—")))
+    ts = escape(str((meta.get("timestamp") or "")[:16] or "—"))
+    status = escape(str(status))
 
     right_html = ""
     if extra_right:

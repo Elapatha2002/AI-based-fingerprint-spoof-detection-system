@@ -39,6 +39,25 @@ SALT_BYTES = 16
 MIN_PASSWORD_LEN = 8
 
 
+def offline_mode_enabled() -> bool:
+    """Return whether the loopback-only local recovery launcher is in use."""
+    return os.environ.get("FSDXAI_OFFLINE_MODE", "").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+
+
+def _offline_operator() -> dict:
+    """Non-persistent identity used only in explicit local recovery mode."""
+    return {
+        "user_id": "USR-LOCAL-OFFLINE",
+        "username": "local-operator",
+        "role": "super_admin",
+        "full_name": "Local Recovery Operator",
+        "email": "",
+        "offline_mode": True,
+    }
+
+
 # ── Password hashing (stdlib only) ────────────────────────────────────
 
 def hash_password(password: str) -> str:
@@ -83,7 +102,7 @@ def seed_super_admin_if_needed() -> Optional[str]:
     Returns the new user_id, or None if not seeded (table already had users
     or the .env values were missing).
     """
-    if database.user_count() > 0:
+    if offline_mode_enabled() or database.user_count() > 0:
         return None
 
     username = os.environ.get("INITIAL_ADMIN_USERNAME", "").strip()
@@ -115,6 +134,10 @@ def seed_super_admin_if_needed() -> Optional[str]:
 
 def current_user() -> Optional[dict]:
     """Return the currently logged-in user dict, or None if not logged in."""
+    if offline_mode_enabled():
+        # The local launcher binds the server to 127.0.0.1. Do not create,
+        # reset, or expose a persisted password just to run the demo locally.
+        st.session_state["current_user"] = _offline_operator()
     return st.session_state.get("current_user")
 
 
@@ -158,6 +181,9 @@ def login(username: str, password: str) -> tuple[bool, str]:
 
 def logout() -> None:
     """Clear the session's current_user (and related derived values)."""
+    if offline_mode_enabled():
+        # The recovery operator is restored at the next app rerun.
+        return
     for key in ("current_user", "form_examiner"):
         if key in st.session_state:
             del st.session_state[key]

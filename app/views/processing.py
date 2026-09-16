@@ -92,7 +92,7 @@ def render():
             "NFIQ2": r["nfiq2"],
             "Time": f"{r['timing_ms']['total']}ms",
         } for j, r in enumerate(tail)])
-        tail_slot.dataframe(df, use_container_width=True, hide_index=True)
+        tail_slot.dataframe(df, width="stretch", hide_index=True)
 
     # Done
     st.session_state.current_batch["results"] = results

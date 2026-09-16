@@ -98,7 +98,7 @@ def render(from_drilldown: bool = False, drilldown_meta: dict | None = None):
 
     with cols[0]:
         st.image(img, caption=f"{filename} · {img.size[0]}x{img.size[1]}",
-                 use_container_width=True)
+                 width="stretch")
 
     with cols[1]:
         # TIER 1 — Hero verdict + confidence gauge
@@ -127,7 +127,7 @@ def render(from_drilldown: bool = False, drilldown_meta: dict | None = None):
         ])
 
     # Diagnostic panel — shows raw model outputs for debugging
-    with st.expander("🔍 Diagnostic info (raw model output)", expanded=False):
+    with st.expander("Technical diagnostics", expanded=False):
         import hashlib
         img_hash = hashlib.md5(image_bytes or b"").hexdigest()[:12] if image_bytes else "no-bytes"
         st.markdown(
@@ -178,8 +178,8 @@ def render(from_drilldown: bool = False, drilldown_meta: dict | None = None):
     # Action row
     a1, a2, a3, _ = st.columns([1, 1, 1, 3])
     with a1:
-        if st.button("📑  Generate PDF", type="primary",
-                     use_container_width=True, key="sr_report"):
+        if st.button("Generate report", type="primary",
+                     width="stretch", key="sr_report"):
             log_action(
                 action=f"Initiated report generation for {filename}",
                 case_id=meta.get("case_id", "—"),
@@ -195,7 +195,7 @@ def render(from_drilldown: bool = False, drilldown_meta: dict | None = None):
             st.rerun()
 
     with a2:
-        if st.button("🔬  Compare All", use_container_width=True,
+        if st.button("Compare explanations", width="stretch",
                      key="sr_compare"):
             st.session_state["compare_target"] = {
                 "filename": filename,
@@ -205,7 +205,7 @@ def render(from_drilldown: bool = False, drilldown_meta: dict | None = None):
             st.rerun()
 
     with a3:
-        if st.button("💾  Save to History", use_container_width=True,
+        if st.button("Save case record", width="stretch",
                      key="sr_save"):
             from state import add_to_history
             add_to_history({
@@ -220,7 +220,7 @@ def render(from_drilldown: bool = False, drilldown_meta: dict | None = None):
                 "filename": filename,
             })
 
-            # Persist to SQLite + S3 (image bytes → S3, metadata → DB).
+            # Persist to SQLite + configured object storage (best effort).
             # Best-effort — a cloud outage must not break the demo.
             from app.services import persistence
             analysis_id = persistence.save_single_analysis(
@@ -231,10 +231,9 @@ def render(from_drilldown: bool = False, drilldown_meta: dict | None = None):
                 xai_panels=xai_panels,
             )
             if analysis_id:
-                st.toast(f"Saved to history and cloud ({analysis_id}).",
-                         icon="☁")
+                st.toast(f"Saved to the case record ({analysis_id}).", icon="✓")
                 log_action(
-                    action="Persisted analysis to S3 + SQLite",
+                    action="Persisted analysis to storage + SQLite",
                     case_id=meta.get("case_id", "—"),
                     details=f"analysis_id={analysis_id}",
                 )

@@ -17,8 +17,9 @@ def render():
     if not batch or not batch.get("results"):
         empty_state(
             icon="📊",
-            message="No batch has been run yet. Upload a zip on the Analyse page.",
-            action_label="Go to Analyse  →",
+            title="Run a batch analysis first",
+            message="No batch has been run yet. Upload a ZIP archive on the Analyze page.",
+            action_label="Go to Analyze",
             action_page="analyze",
             key="empty_batch_start",
         )
@@ -50,14 +51,14 @@ def render():
     e1, e2, e3 = st.columns([1, 1, 6])
     with e1:
         csv_bytes = _build_csv(results)
-        st.download_button("⬇ CSV", data=csv_bytes,
+        st.download_button("Download results (CSV)", data=csv_bytes,
                            file_name=f"{meta['case_id']}_results.csv",
-                           mime="text/csv", use_container_width=True)
+                           mime="text/csv", width="stretch")
     with e2:
         zip_bytes = _build_zip_bundle(results, meta)
-        st.download_button("⬇ ZIP", data=zip_bytes,
+        st.download_button("Download case bundle (ZIP)", data=zip_bytes,
                            file_name=f"{meta['case_id']}_bundle.zip",
-                           mime="application/zip", use_container_width=True)
+                           mime="application/zip", width="stretch")
 
     st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 
@@ -88,36 +89,28 @@ def render():
     # Filters
     section_header("Results")
 
-    # All four controls share the same top edge. Selectboxes hide their
-    # own label and use format_func to keep the filter name inline; the
-    # checkbox is nudged down with a spacer so it aligns with the inputs.
+    # Visible labels reduce ambiguity for keyboard and assistive-technology
+    # users; a compact layout preserves the at-a-glance workflow.
     f1, f2, f3, f4 = st.columns([3, 1, 1, 1])
     with f1:
         search = st.text_input("Search filename",
-                               placeholder="🔍 Search...",
-                               label_visibility="collapsed")
+                               placeholder="Type a filename")
     with f2:
         filter_v = st.selectbox(
-            "Verdict filter",
+            "Verdict",
             ["All", "Live", "Spoof"],
             key="bd_filter_v",
-            label_visibility="collapsed",
-            format_func=lambda x: f"Verdict: {x}",
         )
     with f3:
         filter_q = st.selectbox(
-            "Quality filter",
+            "Quality",
             ["All", "High", "Medium", "Low"],
             key="bd_filter_q",
-            label_visibility="collapsed",
-            format_func=lambda x: f"Quality: {x}",
         )
     with f4:
-        # Reserve the same vertical space as the other controls' hidden
-        # labels so the checkbox aligns with the top of the row.
         st.markdown("<div style='height:29px;'></div>",
                     unsafe_allow_html=True)
-        anomaly_only = st.checkbox("⚠ Anomaly only", key="bd_anomaly_only")
+        anomaly_only = st.checkbox("Anomalies only", key="bd_anomaly_only")
 
     filtered = results_table(results, filter_verdict=filter_v,
                              filter_quality=filter_q,
@@ -127,13 +120,13 @@ def render():
     # Drill-down navigation: filename selector
     if not filtered.empty:
         st.markdown("<div class='fsd-section-h' style='margin-top:16px;'>"
-                    "Inspect</div>", unsafe_allow_html=True)
+                    "Inspect an image</div>", unsafe_allow_html=True)
         names = filtered["filename"].tolist()
         choice = st.selectbox("Select an image to drill down",
                               names, key="bd_drilldown_select")
         c1, c2 = st.columns([1, 5])
         with c1:
-            if st.button("Open →", type="primary", use_container_width=True,
+            if st.button("Open selected image", type="primary", width="stretch",
                          key="bd_open_drilldown"):
                 idx = names.index(choice)
                 st.session_state.drilldown_idx = idx

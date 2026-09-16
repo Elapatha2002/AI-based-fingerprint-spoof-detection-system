@@ -29,9 +29,9 @@ def _single_panel(panel: dict, name: str, original_image, legend: str):
     cols = st.columns(2)
     with cols[0]:
         if original_image is not None:
-            st.image(original_image, caption="Original", use_container_width=True)
+            st.image(original_image, caption="Original", width="stretch")
     with cols[1]:
-        st.image(panel["image"], caption=f"{name} overlay", use_container_width=True)
+        st.image(panel["image"], caption=f"{name} overlay", width="stretch")
 
     st.markdown(
         f"<div class='fsd-mono' style='margin-top:8px;'>{legend}</div>",
@@ -54,10 +54,10 @@ def _all_panels_grid(xai_panels: dict, original_image):
         st.info("No XAI outputs available.")
         return
     cols = st.columns(4)
-    cols[0].image(original_image, caption="Original", use_container_width=True)
+    cols[0].image(original_image, caption="Original", width="stretch")
     cols[1].image(xai_panels["gradcam"]["image"], caption="Grad-CAM++",
-                  use_container_width=True)
+                  width="stretch")
     cols[2].image(xai_panels["shap"]["image"], caption="SHAP",
-                  use_container_width=True)
+                  width="stretch")
     cols[3].image(xai_panels["lime"]["image"], caption="LIME",
-                  use_container_width=True)
+                  width="stretch")

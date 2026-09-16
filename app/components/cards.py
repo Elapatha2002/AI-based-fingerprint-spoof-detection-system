@@ -175,27 +175,26 @@ def divider():
 
 
 def empty_state(icon: str, message: str,
+                title: str = "Nothing to show yet",
                 action_label: str | None = None,
                 action_page: str | None = None,
                 key: str | None = None) -> None:
-    """Consistent empty-state block used across views.
-
-    Renders a large centred icon, a muted single-line message, and an
-    optional primary-action button that navigates to `action_page`.
+    """Render a helpful empty state with a clear next action.
 
     Args:
         icon:         a single emoji or short glyph
-        message:      one-line explanation of why the view is empty
+        message:      concise explanation of why the view is empty
+        title:        human-readable state heading
         action_label: optional CTA text (e.g. "Start an analysis")
         action_page:  page key to navigate to on click
         key:          Streamlit widget key (required if action_label is set)
     """
     st.markdown(
         f"""
-        <div style='text-align:center;padding:64px 0;
-                    color:var(--text-muted);'>
-          <div style='font-size:48px;line-height:1;'>{icon}</div>
-          <div style='font-size:14px;margin-top:12px;'>{message}</div>
+        <div class='fsd-empty-state' role='status'>
+          <div class='fsd-empty-icon' aria-hidden='true'>{icon}</div>
+          <div class='fsd-empty-title'>{title}</div>
+          <div class='fsd-empty-message'>{message}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -204,7 +203,7 @@ def empty_state(icon: str, message: str,
         _, mid, _ = st.columns([2, 1, 2])
         with mid:
             if st.button(action_label, type="primary",
-                          use_container_width=True,
+                          width="stretch",
                           key=key or f"empty_{action_page}"):
                 st.session_state.current_page = action_page
                 st.rerun()

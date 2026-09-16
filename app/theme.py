@@ -8,8 +8,8 @@ TOKENS = {
     "border_subtle": "#2A3441",
     "border_strong": "#3D4A5C",
     "text_primary": "#E6EDF3",
-    "text_secondary": "#8B949E",
-    "text_muted": "#6E7681",
+    "text_secondary": "#B6C2D0",
+    "text_muted": "#93A1B2",
     "accent_live": "#3FB950",
     "accent_spoof": "#F85149",
     "accent_warn": "#D29922",
@@ -26,8 +26,8 @@ CSS = """
   --border-subtle: #2A3441;
   --border-strong: #3D4A5C;
   --text-primary: #E6EDF3;
-  --text-secondary: #8B949E;
-  --text-muted: #6E7681;
+  --text-secondary: #B6C2D0;
+  --text-muted: #93A1B2;
   --accent-live: #3FB950;
   --accent-spoof: #F85149;
   --accent-warn: #D29922;
@@ -163,6 +163,13 @@ CSS = """
   margin-top: var(--space-3);
   padding-top: var(--space-3);
   border-top: 1px solid var(--border-subtle);
+}
+.fsd-gauge-note {
+  margin-top: var(--space-2);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
 }
 
 /* ──────────────────────── Verdict hero treatment ────────────────────── */
@@ -314,47 +321,6 @@ CSS = """
   box-shadow: 0 0 0 2px var(--accent-info), 0 0 12px rgba(88,166,255,0.30);
 }
 
-/* ──────────────────────── Top nav: link-style buttons ────────────────── */
-/* Target only the FIRST horizontal block — the nav. Subsequent buttons keep
-   their normal button look. */
-.block-container > div:first-child [data-testid="stHorizontalBlock"]:first-of-type .stButton > button {
-  background: transparent !important;
-  border: 1px solid transparent !important;
-  border-radius: var(--radius-md) !important;
-  box-shadow: none !important;
-  color: var(--text-secondary) !important;
-  font-weight: 500 !important;
-  padding: 6px 14px !important;
-  transition: color var(--duration-fast) var(--ease-out),
-              background var(--duration-fast) var(--ease-out);
-}
-.block-container > div:first-child [data-testid="stHorizontalBlock"]:first-of-type .stButton > button:hover {
-  color: var(--text-primary) !important;
-  background: rgba(255,255,255,0.04) !important;
-  border-color: transparent !important;
-}
-.block-container > div:first-child [data-testid="stHorizontalBlock"]:first-of-type .stButton > button:focus-visible {
-  box-shadow: 0 0 0 2px var(--accent-info) !important;
-}
-/* Active nav item — rendered in bold via **label** */
-.block-container > div:first-child [data-testid="stHorizontalBlock"]:first-of-type .stButton > button p strong {
-  color: var(--accent-info) !important;
-  font-weight: 600 !important;
-}
-
-/* ──────────────────────── Fixed-position version pill ────────────────── */
-.fsd-nav-version-pill {
-  position: fixed;
-  top: 14px;
-  right: 28px;
-  z-index: 9999;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 11px;
-  color: var(--text-muted);
-  letter-spacing: 0.3px;
-  pointer-events: none;
-}
-
 /* ──────────────────────── Primary buttons: glow + lift ─────────────────
    Affects "Start Analysis" hero CTA + "Generate PDF" + any other primary
    action across the app. Subtle enough not to be distracting. */
@@ -405,17 +371,6 @@ CSS = """
   background: rgba(88,166,255,0.06) !important;
 }
 
-/* Re-suppress the new button enhancements for top-nav buttons (we want them
-   to stay link-style — earlier rule above still applies but specificity. */
-.block-container > div:first-child [data-testid="stHorizontalBlock"]:first-of-type .stButton > button,
-.block-container > div:first-child [data-testid="stHorizontalBlock"]:first-of-type .stButton > button:hover {
-  background: transparent !important;
-  box-shadow: none !important;
-  border: 1px solid transparent !important;
-  padding: 6px 14px !important;
-  transform: none !important;
-}
-
 /* Hide Streamlit default chrome */
 #MainMenu {visibility: hidden;}
 header[data-testid="stHeader"] {display: none;}
@@ -430,9 +385,9 @@ section[data-testid="stSidebar"] {display: none;}
 }
 
 .block-container {
-  padding-top: 5rem !important;
-  padding-bottom: 4rem !important;
-  max-width: 1400px;
+  padding-top: 1.5rem !important;
+  padding-bottom: 2.5rem !important;
+  max-width: 1240px;
 }
 
 /* Top nav bar */
@@ -754,6 +709,336 @@ div[data-testid="stMetricValue"] {
   background: rgba(248,81,73,0.1);
   border-left-color: var(--accent-spoof);
   color: var(--text-primary);
+}
+
+/* ──────────────────────── Usability and accessibility refresh ────────── */
+/*
+   These rules deliberately sit after the base theme. They remove the visual
+   ambiguity seen in the first iteration: low-emphasis controls, a floating
+   navigation row, and status information that obscured page actions.
+*/
+.stApp {
+  min-width: 320px;
+  background:
+    radial-gradient(circle at 50% -20%, rgba(88,166,255,0.09), transparent 34rem),
+    var(--bg-base);
+}
+
+/* Product and account context ------------------------------------------------ */
+.fsd-app-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 8px 0;
+}
+.fsd-brand-mark {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  color: #06101A;
+  background: linear-gradient(135deg, #77B9FF, var(--accent-info));
+  font-weight: 800;
+  font-size: 18px;
+  box-shadow: 0 6px 18px rgba(88,166,255,0.24);
+}
+.fsd-brand-name {
+  color: var(--text-primary);
+  font-weight: 750;
+  font-size: 16px;
+  letter-spacing: 0.2px;
+}
+.fsd-brand-context,
+.fsd-account-role {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.fsd-account-summary {
+  min-height: 58px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  flex-direction: column;
+  padding: 8px 0;
+}
+.fsd-account-name {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+/* Streamlit pills are used as one named, keyboard-operable nav group. */
+[data-testid="stPills"] {
+  margin: 4px 0 20px;
+}
+[data-testid="stPills"] [role="radiogroup"] {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+[data-testid="stPills"] button {
+  min-height: 40px !important;
+  border-radius: 8px !important;
+  color: var(--text-secondary) !important;
+  font-weight: 600 !important;
+}
+[data-testid="stPills"] button[aria-checked="true"],
+[data-testid="stPills"] button[aria-pressed="true"] {
+  color: #06101A !important;
+  background: var(--accent-info) !important;
+  border-color: var(--accent-info) !important;
+}
+
+/* Clear affordances, sufficiently large targets, and obvious keyboard focus. */
+.stButton > button,
+[data-testid="stDownloadButton"] > button,
+[data-testid="stFileUploader"] button {
+  min-height: 44px !important;
+  border-radius: 8px !important;
+}
+.stButton > button:disabled,
+[data-testid="stDownloadButton"] > button:disabled {
+  opacity: 0.48 !important;
+  cursor: not-allowed !important;
+}
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[role="combobox"]:focus-visible,
+[data-baseweb="tab"]:focus-visible {
+  outline: 3px solid #A9D3FF !important;
+  outline-offset: 2px !important;
+  box-shadow: none !important;
+}
+
+/* Form fields: labels stay visible, and focus cannot rely on colour alone. */
+[data-testid="stTextInput"] label,
+[data-testid="stTextArea"] label,
+[data-testid="stSelectbox"] label,
+[data-testid="stRadio"] label,
+[data-testid="stFileUploader"] label,
+[data-testid="stCheckbox"] label {
+  color: var(--text-primary) !important;
+  font-weight: 600 !important;
+}
+[data-baseweb="input"] > div,
+[data-baseweb="textarea"] > div,
+[data-baseweb="select"] > div {
+  min-height: 44px;
+  background: var(--bg-surface) !important;
+  border-color: var(--border-strong) !important;
+  border-radius: 8px !important;
+}
+[data-baseweb="input"] > div:focus-within,
+[data-baseweb="textarea"] > div:focus-within,
+[data-baseweb="select"] > div:focus-within {
+  border-color: var(--accent-info) !important;
+  box-shadow: 0 0 0 3px rgba(88,166,255,0.20) !important;
+}
+[data-baseweb="input"] input::placeholder,
+[data-baseweb="textarea"] textarea::placeholder {
+  color: #AAB6C5 !important;
+  opacity: 1 !important;
+}
+
+/* The server can accept a 50 MB zip; custom guidance below states the
+   different single-image limit accurately, so hide Streamlit's generic cap. */
+[data-testid="stFileUploader"] small {
+  display: none !important;
+}
+[data-testid="stFileUploader"] section {
+  min-height: 146px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20,27,35,0.72) !important;
+}
+[data-testid="stFileUploader"] section:focus-within {
+  border-color: var(--accent-info) !important;
+  box-shadow: 0 0 0 3px rgba(88,166,255,0.20);
+}
+.fsd-upload-guidance {
+  padding: 10px 12px;
+  margin-top: 8px;
+  border-left: 3px solid var(--accent-info);
+  border-radius: 0 7px 7px 0;
+  background: rgba(88,166,255,0.08);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.fsd-upload-guidance strong { color: var(--text-primary); }
+
+/* Page hierarchy and reusable workflow/empty states ------------------------ */
+.fsd-page-title {
+  font-size: clamp(26px, 3vw, 32px);
+  line-height: 1.2;
+  letter-spacing: -0.35px;
+  margin: 16px 0 6px;
+}
+.fsd-page-subtitle {
+  max-width: 720px;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.55;
+  margin-bottom: 28px;
+}
+.fsd-section-h {
+  margin-top: 20px;
+  color: var(--text-primary);
+}
+.fsd-card,
+.fsd-feature,
+div[data-testid="stMetric"] {
+  border-color: var(--border-strong);
+  box-shadow: var(--elev-1);
+}
+.fsd-feature {
+  min-height: 178px;
+  transition: border-color var(--duration-fast) var(--ease-out),
+              transform var(--duration-fast) var(--ease-out);
+}
+.fsd-feature:hover {
+  border-color: rgba(88,166,255,0.72);
+  transform: translateY(-2px);
+}
+.fsd-empty-state {
+  max-width: 620px;
+  margin: 36px auto 12px;
+  padding: 32px;
+  text-align: center;
+  background: rgba(20,27,35,0.76);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+}
+.fsd-empty-icon { font-size: 38px; line-height: 1; }
+.fsd-empty-title {
+  margin-top: 14px;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 700;
+}
+.fsd-empty-message {
+  max-width: 460px;
+  margin: 8px auto 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.fsd-home-hero {
+  max-width: 900px;
+  margin: 26px auto 28px;
+  padding: 40px 32px;
+  text-align: center;
+  border: 1px solid rgba(61,74,92,0.9);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(20,27,35,0.98), rgba(20,27,35,0.64));
+}
+.fsd-home-eyebrow {
+  margin-bottom: 12px;
+  color: var(--accent-info);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+}
+.fsd-home-title {
+  color: var(--text-primary);
+  font-size: clamp(30px, 4vw, 46px);
+  font-weight: 750;
+  line-height: 1.12;
+  letter-spacing: -0.65px;
+}
+.fsd-home-subtitle {
+  max-width: 680px;
+  margin: 16px auto 0;
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1.6;
+}
+.fsd-home-proof {
+  margin: 22px auto 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.fsd-login-intro {
+  margin: 42px 0 20px;
+  text-align: center;
+}
+.fsd-login-mark {
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #77B9FF, var(--accent-info));
+  color: #06101A;
+  font-size: 24px;
+  font-weight: 800;
+  box-shadow: 0 10px 28px rgba(88,166,255,0.28);
+}
+.fsd-login-title {
+  margin-top: 12px;
+  color: var(--text-primary);
+  font-size: 26px;
+  font-weight: 750;
+  letter-spacing: -0.3px;
+}
+.fsd-login-subtitle,
+.fsd-login-helper,
+.fsd-login-notice {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.fsd-login-helper { margin: 0 0 16px; }
+.fsd-login-notice {
+  margin: 16px auto 0;
+  max-width: 430px;
+  text-align: center;
+}
+
+/* The status content remains available without covering controls. */
+.fsd-status {
+  position: static !important;
+  height: auto !important;
+  min-height: 44px;
+  margin-top: 36px;
+  padding: 10px 0 !important;
+  background: transparent !important;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 0;
+  flex-wrap: wrap;
+}
+.fsd-status-spacer { flex: 1 1 24px; }
+.fsd-chip {
+  min-height: 24px;
+  padding: 3px 9px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 760px) {
+  .block-container {
+    padding: 12px 16px 28px !important;
+  }
+  .fsd-app-brand { min-height: 50px; }
+  .fsd-account-summary {
+    min-height: 50px;
+    align-items: flex-end;
+  }
+  .fsd-brand-context,
+  .fsd-account-role { display: none; }
+  .fsd-home-hero { margin-top: 14px; padding: 28px 18px; }
+  .fsd-feature { min-height: 0; }
+  .fsd-empty-state { margin-top: 24px; padding: 24px 18px; }
+  .fsd-audit-row {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
 }
 </style>
 """

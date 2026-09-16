@@ -25,8 +25,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-import boto3
-from botocore.exceptions import ClientError, NoCredentialsError
+try:
+    import boto3
+    from botocore.config import Config as BotocoreConfig
+    from botocore.exceptions import ClientError, NoCredentialsError
+except ImportError:  # Offline mode deliberately has no AWS dependency.
+    boto3 = None
+    BotocoreConfig = None
+
+    class ClientError(Exception):
+        pass
+
+    class NoCredentialsError(Exception):
+        pass
 from dotenv import load_dotenv
 
 # Load .env from project root
@@ -40,6 +51,9 @@ class S3Config:
     secret_key: str
     region: str
     bucket: str
+    endpoint_url: str = ""
+    addressing_style: str = "auto"
+    server_side_encryption: str = "AES256"
 
     @classmethod
     def from_env(cls) -> "S3Config":
@@ -48,6 +62,11 @@ class S3Config:
             secret_key=os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
             region=os.environ.get("AWS_REGION", "ap-south-1"),
             bucket=os.environ.get("S3_BUCKET_NAME", ""),
+            endpoint_url=os.environ.get("S3_ENDPOINT_URL", "").strip(),
+            addressing_style=os.environ.get("S3_ADDRESSING_STYLE", "auto").strip(),
+            server_side_encryption=os.environ.get(
+                "S3_SERVER_SIDE_ENCRYPTION", "AES256"
+            ).strip(),
         )
 
     def is_configured(self) -> bool:
@@ -73,12 +92,26 @@ class StorageService:
                     "S3 is not configured. Fill in AWS_ACCESS_KEY_ID, "
                     "AWS_SECRET_ACCESS_KEY and S3_BUCKET_NAME in .env"
                 )
-            self._client = boto3.client(
-                "s3",
-                aws_access_key_id=self.config.access_key,
-                aws_secret_access_key=self.config.secret_key,
-                region_name=self.config.region,
-            )
+            if boto3 is None:
+                raise RuntimeError(
+                    "The AWS SDK is not installed. Use local offline mode or "
+                    "install boto3 to use S3."
+                )
+            client_args = {
+                "service_name": "s3",
+                "aws_access_key_id": self.config.access_key,
+                "aws_secret_access_key": self.config.secret_key,
+                "region_name": self.config.region,
+            }
+            if self.config.endpoint_url:
+                client_args["endpoint_url"] = self.config.endpoint_url
+                # OCI Object Storage's S3 Compatibility API supports path-style
+                # addressing. Keep this configurable for AWS and other providers.
+                if BotocoreConfig is not None:
+                    client_args["config"] = BotocoreConfig(
+                        s3={"addressing_style": self.config.addressing_style}
+                    )
+            self._client = boto3.client(**client_args)
         return self._client
 
     def health_check(self) -> tuple[bool, str]:
@@ -101,13 +134,18 @@ class StorageService:
             content_type, _ = mimetypes.guess_type(key)
             if content_type is None:
                 content_type = "application/octet-stream"
-        self.client.put_object(
+        put_args = dict(
             Bucket=self.config.bucket,
             Key=key,
             Body=data,
             ContentType=content_type,
-            ServerSideEncryption="AES256",
         )
+        # AWS S3 uses AES256 by default in the existing deployment. OCI
+        # buckets use their bucket-level encryption instead, so its server
+        # secret file sets this value to "none" and omits the AWS-only header.
+        if self.config.server_side_encryption.lower() not in {"", "none", "off"}:
+            put_args["ServerSideEncryption"] = self.config.server_side_encryption
+        self.client.put_object(**put_args)
         return key
 
     def upload_file(self, key: str, local_path: str) -> str:
@@ -141,6 +179,64 @@ class StorageService:
             return False
 
 
+class LocalStorageService:
+    """Filesystem storage used when AWS is unavailable or local mode is requested.
+
+    It preserves the same logical keys as S3 but writes beneath the gitignored
+    ``storage_local`` folder. No cloud account, network access, or credentials
+    are needed.
+    """
+
+    backend_name = "local disk"
+
+    def __init__(self, root: Optional[Path] = None):
+        configured = os.environ.get("FSDXAI_LOCAL_STORAGE_DIR", "").strip()
+        selected = root or (Path(configured) if configured else
+                            PROJECT_ROOT / "storage_local")
+        self.root = selected.expanduser().resolve()
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    def _path_for(self, key: str) -> Path:
+        """Resolve a logical object key safely beneath the local root."""
+        relative = Path(key.replace("\\", "/"))
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError("Storage keys must be relative and cannot contain '..'")
+        candidate = (self.root / relative).resolve()
+        if candidate != self.root and self.root not in candidate.parents:
+            raise ValueError("Storage key resolves outside the local storage root")
+        return candidate
+
+    def health_check(self) -> tuple[bool, str]:
+        return True, f"OK - local storage: {self.root}"
+
+    def upload_bytes(self, key: str, data: bytes,
+                     content_type: Optional[str] = None) -> str:
+        del content_type  # Retained for StorageService API compatibility.
+        destination = self._path_for(key)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(data)
+        return key
+
+    def upload_file(self, key: str, local_path: str) -> str:
+        return self.upload_bytes(key, Path(local_path).read_bytes())
+
+    def download_bytes(self, key: str) -> bytes:
+        return self._path_for(key).read_bytes()
+
+    def presigned_url(self, key: str, expires_seconds: int = 3600) -> str:
+        """Return a local URI; normal application reads use download_bytes."""
+        del expires_seconds
+        return self._path_for(key).as_uri()
+
+    def delete(self, key: str) -> None:
+        path = self._path_for(key)
+        if path.exists():
+            path.unlink()
+
+    def object_exists(self, key: str) -> bool:
+        return self._path_for(key).is_file()
+
+
 # ── Key builders (single source of truth for bucket layout) ─────────
 
 def upload_key(case_id: str, analysis_id: str, extension: str = "png") -> str:
@@ -157,11 +253,22 @@ def report_key(case_id: str, report_id: str) -> str:
 
 # ── Module-level singleton (lazy) ────────────────────────────────────
 
-_service: Optional[StorageService] = None
+_service: Optional[StorageService | LocalStorageService] = None
 
 
-def get_storage() -> StorageService:
+def offline_mode_enabled() -> bool:
+    """Return true when the dedicated local recovery launcher is in use."""
+    return os.environ.get("FSDXAI_OFFLINE_MODE", "").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+
+
+def get_storage() -> StorageService | LocalStorageService:
     global _service
     if _service is None:
-        _service = StorageService()
+        config = S3Config.from_env()
+        # If configuration is absent or recovery mode is explicit, do not
+        # attempt a cloud connection: use the local disk backend instead.
+        _service = (LocalStorageService() if offline_mode_enabled() or
+                    not config.is_configured() else StorageService(config))
     return _service

@@ -6,8 +6,12 @@ from components.tables import history_table
 
 def render():
     page_title("History",
-               "Persisted analyses (SQLite + AWS S3). "
-               "Falls back to session-state if cloud is offline.")
+               "Find and reopen analyses saved in the case record.")
+
+    # Reset widget values before the inputs are instantiated on this rerun.
+    if st.session_state.pop("history_reset_filters", False):
+        st.session_state.pop("hist_search", None)
+        st.session_state.pop("hist_type", None)
 
     # Prefer the persisted store; fall back to session history if DB read fails
     # or nothing has been saved yet.
@@ -23,30 +27,22 @@ def render():
         )
         return
 
-    f1, f2, f3 = st.columns([3, 1, 1])
+    f1, f2, f3 = st.columns([3, 1.25, 1])
     with f1:
-        search = st.text_input("Search case ID",
-                               placeholder="🔍 Search by case ID...",
-                               label_visibility="collapsed")
+        search = st.text_input("Search by case ID",
+                               placeholder="e.g. CASE-2026-0004",
+                               key="hist_search")
     with f2:
         type_filter = st.selectbox(
-            "Type filter",
+            "Analysis type",
             ["All", "Single", "Batch"],
             key="hist_type",
-            label_visibility="collapsed",
-            format_func=lambda x: f"Type: {x}",
         )
     with f3:
-        # Reserve the same vertical space as a collapsed Streamlit label
-        # (~29px including the label margin) so the button aligns with the
-        # search input and Type dropdown on the same row.
-        st.markdown(
-            "<div style='height:29px;'></div>",
-            unsafe_allow_html=True,
-        )
-        if st.button("🗑  Clear All", use_container_width=True,
-                     key="hist_clear"):
-            st.session_state.history = []
+        st.markdown("<div style='height:27px;'></div>", unsafe_allow_html=True)
+        if st.button("Reset filters", width="stretch",
+                     key="hist_reset"):
+            st.session_state.history_reset_filters = True
             st.rerun()
 
     filtered = history
@@ -57,23 +53,38 @@ def render():
         filtered = [h for h in filtered
                     if h.get("type", "").lower() == type_filter.lower()]
 
+    if not filtered:
+        empty_state(
+            icon="🔎",
+            title="No matching analyses",
+            message="Try a different case ID or reset the filters to view all saved analyses.",
+        )
+        return
+
+    st.caption(f"{len(filtered)} saved {'analysis' if len(filtered) == 1 else 'analyses'}")
     history_table(filtered)
 
     if filtered:
-        st.markdown("<div class='fsd-section-h' style='margin-top:16px;'>"
-                    "Open</div>", unsafe_allow_html=True)
+        st.markdown("<div class='fsd-section-h' style='margin-top:20px;'>"
+                    "Open a saved analysis</div>", unsafe_allow_html=True)
         labels = [
             f"{h.get('created_at', '')[:19].replace('T', ' ')}  ·  "
             f"{h.get('case_id', '—')}  ·  {h.get('type', '').title()}"
             for h in filtered
         ]
-        idx = st.selectbox("Pick an entry to reopen", list(range(len(labels))),
+        open_col, button_col = st.columns([4, 1])
+        with open_col:
+            idx = st.selectbox("Choose an analysis", list(range(len(labels))),
                            format_func=lambda i: labels[i],
                            key="hist_reopen_select")
-        if st.button("Open →", type="primary", key="hist_open"):
+        with button_col:
+            st.markdown("<div style='height:27px;'></div>", unsafe_allow_html=True)
+            open_selected = st.button("Open analysis", type="primary",
+                                      width="stretch", key="hist_open")
+        if open_selected:
             entry = filtered[idx]
             if entry["type"] == "batch":
-                # For persisted batches, refetch every image from S3.
+                # For persisted batches, refetch every image from storage.
                 # For in-session batches, use the cached files list.
                 if entry.get("_source") == "db":
                     files = _fetch_batch_from_s3(entry["case_id"])
@@ -90,7 +101,7 @@ def render():
                     }
                 st.session_state.current_page = "batch_dashboard"
             else:
-                # For persisted single, download the original image from S3.
+                # For persisted single, download the original image from storage.
                 image_bytes = b""
                 if entry.get("_source") == "db":
                     image_bytes = _fetch_single_from_s3(entry["case_id"])
@@ -104,7 +115,7 @@ def render():
 
 
 def _fetch_single_from_s3(case_id: str) -> bytes:
-    """Download the most recent analysis's image bytes for a case."""
+    """Download the most recent analysis image from the active backend."""
     try:
         from app.services import database, storage
         analyses = database.list_analyses(case_id=case_id, limit=1)
@@ -116,7 +127,7 @@ def _fetch_single_from_s3(case_id: str) -> bytes:
 
 
 def _fetch_batch_from_s3(case_id: str) -> list[tuple[str, bytes]]:
-    """Download every analysis's image bytes as (filename, bytes) tuples."""
+    """Download every analysis image as ``(filename, bytes)`` tuples."""
     try:
         from app.services import database, storage
         svc = storage.get_storage()

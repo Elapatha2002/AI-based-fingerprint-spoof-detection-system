@@ -5,19 +5,16 @@ from app.services import auth
 
 
 def render():
-    # Center the login card
-    _, mid, _ = st.columns([1, 1.2, 1])
+    """Render an intentionally small, focused sign-in task."""
+    _, mid, _ = st.columns([1, 1.25, 1])
     with mid:
-        st.markdown("<div style='height:60px;'></div>", unsafe_allow_html=True)
-
         st.markdown(
             """
-            <div style='text-align:center;margin-bottom:24px;'>
-              <div style='font-size:44px;line-height:1;'>◼</div>
-              <div style='font-size:22px;font-weight:600;margin-top:8px;
-                          color:var(--text-primary);'>FSD-XAI</div>
-              <div style='font-size:13px;color:var(--text-muted);margin-top:4px;'>
-                Forensic Spoof Detection · Explainable AI
+            <div class='fsd-login-intro'>
+              <div class='fsd-login-mark' aria-hidden='true'>F</div>
+              <div class='fsd-login-title'>FSD-XAI</div>
+              <div class='fsd-login-subtitle'>
+                Forensic spoof detection and explanation workspace
               </div>
             </div>
             """,
@@ -26,8 +23,9 @@ def render():
 
         with st.container(border=True):
             st.markdown(
-                "<div class='fsd-section-h' style='margin-bottom:12px;'>"
-                "Sign in</div>",
+                "<div class='fsd-section-h' style='margin:0 0 4px;'>"
+                "Sign in to your workspace</div>"
+                "<div class='fsd-login-helper'>Use the examiner account assigned to you.</div>",
                 unsafe_allow_html=True,
             )
 
@@ -35,7 +33,8 @@ def render():
                 username = st.text_input(
                     "Username",
                     key="login_username",
-                    placeholder="admin or examiner name",
+                    placeholder="Enter your username",
+                    help="Use the username supplied by your system administrator.",
                 )
                 password = st.text_input(
                     "Password",
@@ -44,7 +43,7 @@ def render():
                     placeholder="Enter your password",
                 )
                 submitted = st.form_submit_button(
-                    "Sign in", type="primary", use_container_width=True,
+                    "Sign in", type="primary", width="stretch",
                 )
 
                 if submitted:
@@ -56,10 +55,9 @@ def render():
                         st.error(err)
 
         st.markdown(
-            "<div style='color:var(--text-muted);font-size:11px;"
-            "text-align:center;margin-top:16px;'>"
-            "Access is limited to authorised forensic examiners. "
-            "Contact your system administrator for an account."
+            "<div class='fsd-login-notice'>"
+            "Authorised forensic examiners only. If you have lost access, "
+            "contact your system administrator to reset your account."
             "</div>",
             unsafe_allow_html=True,
         )

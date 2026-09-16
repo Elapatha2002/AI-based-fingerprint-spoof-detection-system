@@ -18,7 +18,7 @@ SENSORS = [
 
 def render():
     page_title("Analyze Fingerprint",
-               "Upload a single image or a zip archive for batch analysis.")
+               "Follow the guided steps to prepare a single fingerprint or a batch for analysis.")
 
     tab_single, tab_batch = st.tabs(["Single Image", "Batch (.zip)"])
 
@@ -83,24 +83,26 @@ def _render_single_tab():
     cols = st.columns([1.4, 1])
 
     with cols[0]:
+        st.markdown("<div class='fsd-section-h'>Step 1 · Select an input</div>",
+                    unsafe_allow_html=True)
         # Source selector — file upload OR live sensor capture. Both paths
         # populate the same session_state["single_source_bytes"] / filename
         # so the Start Analysis button downstream doesn't care which was used.
         source = st.radio(
-            "Input source",
-            ["📁 Upload image file", "🖐 Capture from Mantra sensor"],
+            "Input method",
+            ["Upload an image file", "Capture from Mantra sensor"],
             horizontal=True,
             key="single_source",
         )
 
-        if source.startswith("📁"):
+        if source.startswith("Upload"):
             _render_file_uploader()
         else:
             _render_sensor_capture()
 
     with cols[1]:
         st.markdown(
-            "<div class='fsd-section-h'>Case Metadata</div>",
+            "<div class='fsd-section-h'>Step 2 · Case details</div>",
             unsafe_allow_html=True,
         )
         meta = _render_meta_form("single")
@@ -114,10 +116,15 @@ def _render_single_tab():
                  and bool(meta["case_id"])
                  and bool(meta["examiner"]))
 
-        if st.button("▶  Start Analysis",
+        st.markdown("<div class='fsd-section-h'>Step 3 · Run analysis</div>",
+                    unsafe_allow_html=True)
+        if not ready:
+            st.caption("Add a valid fingerprint image and a case ID to continue.")
+
+        if st.button("Run analysis",
                      type="primary",
                      disabled=not ready,
-                     use_container_width=True,
+                     width="stretch",
                      key="single_start"):
             st.session_state.current_single = {
                 "filename": source_filename or "capture.png",
@@ -137,19 +144,19 @@ def _render_single_tab():
 def _render_file_uploader():
     """File-upload source. Populates single_source_bytes and _filename."""
     st.markdown(
-        "<div class='fsd-section-h'>Upload</div>",
+        "<div class='fsd-section-h'>Fingerprint image</div>",
         unsafe_allow_html=True,
     )
     uploaded = st.file_uploader(
-        "Drop image or click to browse",
+        "Drop an image here or browse your device",
         type=["png", "jpg", "jpeg", "bmp", "tif", "tiff"],
         accept_multiple_files=False,
         key="single_uploader",
-        label_visibility="collapsed",
     )
     st.markdown(
-        "<div class='fsd-mono' style='margin-top:8px;'>"
-        "Accepted: .png .jpg .jpeg .bmp .tif .tiff &nbsp;·&nbsp; Max 10 MB</div>",
+        "<div class='fsd-upload-guidance'><strong>Accepted:</strong> PNG, JPG, JPEG, "
+        "BMP, TIF, and TIFF. <strong>Limit:</strong> 10 MB and 50–4096 px. "
+        "The image stays associated with this case.</div>",
         unsafe_allow_html=True,
     )
 
@@ -165,7 +172,7 @@ def _render_file_uploader():
 
         st.image(img,
                  caption=f"{uploaded.name} · {img.size[0]}×{img.size[1]} px",
-                 width=320)
+                 width="stretch")
 
         st.session_state["single_source_bytes"] = image_bytes
         st.session_state["single_source_filename"] = uploaded.name
@@ -209,9 +216,9 @@ def _render_sensor_capture():
         )
         return
 
-    if st.button("🖐  Capture fingerprint",
+    if st.button("Capture fingerprint",
                   type="primary",
-                  use_container_width=True,
+                  width="stretch",
                   key="single_capture_btn"):
         try:
             with st.spinner("Waiting for finger on sensor..."):
@@ -248,20 +255,19 @@ def _render_batch_tab():
 
     with cols[0]:
         st.markdown(
-            "<div class='fsd-section-h'>Upload Zip</div>",
+            "<div class='fsd-section-h'>Step 1 · Upload a batch archive</div>",
             unsafe_allow_html=True,
         )
         uploaded = st.file_uploader(
-            "Drop zip archive or click to browse",
+            "Drop a ZIP archive here or browse your device",
             type=["zip"],
             accept_multiple_files=False,
             key="batch_uploader",
-            label_visibility="collapsed",
         )
         st.markdown(
-            "<div class='fsd-mono' style='margin-top:8px;'>"
-            "Zip should contain .png/.jpg/.bmp/.tif images. Subfolders OK. "
-            "Max 50 MB total.</div>",
+            "<div class='fsd-upload-guidance'><strong>Accepted:</strong> ZIP archives "
+            "containing PNG, JPG, JPEG, BMP, TIF, or TIFF images. Subfolders are allowed. "
+            "<strong>Archive limit:</strong> 50 MB.</div>",
             unsafe_allow_html=True,
         )
 
@@ -284,7 +290,7 @@ def _render_batch_tab():
 
     with cols[1]:
         st.markdown(
-            "<div class='fsd-section-h'>Case Metadata</div>",
+            "<div class='fsd-section-h'>Step 2 · Case details</div>",
             unsafe_allow_html=True,
         )
         meta = _render_meta_form("batch")
@@ -296,13 +302,18 @@ def _render_batch_tab():
                  and meta["case_id"]
                  and meta["examiner"])
 
-        btn_label = (f"▶  Start Analysis ({valid_count})"
-                     if valid_count else "▶  Start Analysis")
+        btn_label = (f"Run batch analysis ({valid_count} images)"
+                     if valid_count else "Run batch analysis")
+
+        st.markdown("<div class='fsd-section-h'>Step 3 · Run analysis</div>",
+                    unsafe_allow_html=True)
+        if not ready:
+            st.caption("Add a valid archive and a case ID to continue.")
 
         if st.button(btn_label,
                      type="primary",
                      disabled=not ready,
-                     use_container_width=True,
+                     width="stretch",
                      key="batch_start"):
             log_action(
                 action=f"Started batch analysis of {valid_count} images",

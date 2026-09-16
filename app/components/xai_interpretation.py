@@ -55,16 +55,15 @@ def render_xai_interpretation(xai_panels: dict,
         consensus = (
             "⚠ This prediction sits in the uncertain zone (P(spoof) between "
             "0.40 and 0.60). All three explanations should be reviewed; "
-            "rely on the method with highest faithfulness on borderline "
-            "cases (SHAP)."
+            "consider a re-capture or additional review before drawing a conclusion."
         )
         border_color = "var(--accent-warn)"
     elif methods_agree:
         consensus = (
             "✓ All three explanation methods agree on the discriminative "
-            "region. This is the strongest form of XAI evidence — the "
-            "decision is supported by gradient-based, attribution-based, "
-            "and perturbation-based analyses converging on the same area."
+            "region. This provides more consistent supporting evidence, but "
+            "the overlays still require examiner review alongside image quality "
+            "and case context."
         )
         border_color = "var(--accent-live)"
     else:
@@ -106,8 +105,8 @@ def render_xai_interpretation(xai_panels: dict,
             <div>
               <div class='fsd-interp-method'>LIME</div>
               <div class='fsd-interp-desc'>
-                Highlights specific superpixels. Easiest for non-technical
-                viewers and court presentation.
+                Highlights specific superpixels. Useful for non-technical
+                reviewers when used with the other explanations.
               </div>
             </div>
           </div>

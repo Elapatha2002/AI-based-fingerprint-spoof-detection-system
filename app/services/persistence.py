@@ -1,11 +1,11 @@
 """
 Persistence bridge — the single API views use to save/list analyses.
 
-Views never touch S3 or SQLite directly. They call one of these functions:
+Views never touch the storage backend or SQLite directly. They call one of these functions:
 
-  save_single_analysis(...)   — one image + result + XAI  → S3 + DB
-  save_batch_analyses(...)    — many images + results     → S3 + DB (loop)
-  save_report_to_cloud(...)   — PDF bytes                 → S3 + DB
+  save_single_analysis(...)   — one image + result + XAI  → storage + DB
+  save_batch_analyses(...)    — many images + results     → storage + DB (loop)
+  save_report_to_cloud(...)   — PDF bytes                 → storage + DB
   list_history_from_db(...)   — rolled-up cases           → history_table format
 
 Design notes:
@@ -82,7 +82,7 @@ def save_single_analysis(*, filename: str, image_bytes: bytes,
     """Persist one image + one classification result + its XAI heatmaps.
 
     Returns the analysis_id on success, None on any failure.
-    Persistence is best-effort — if S3 or the DB is down, the caller's
+    Persistence is best-effort — if storage or the DB is down, the caller's
     session-state save still succeeds and the user sees no error.
     """
     case_id = meta.get("case_id") or "CASE-UNKNOWN"
@@ -91,7 +91,7 @@ def save_single_analysis(*, filename: str, image_bytes: bytes,
     try:
         _ensure_case(case_id, examiner)
 
-        # 1. Upload the fingerprint image to S3
+        # 1. Upload the fingerprint image to the selected storage backend.
         ext = _guess_extension(filename)
         analysis_id_seed = f"AN-{_sha256(image_bytes)[:16]}"
         image_key = storage.upload_key(case_id, analysis_id_seed, ext)

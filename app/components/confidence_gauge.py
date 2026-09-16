@@ -1,9 +1,8 @@
-"""Confidence gauge with operating-point markers.
+"""Decision-score gauge for the result view.
 
-Shows P(spoof) as a horizontal needle on a tri-zone track (live / uncertain /
-spoof) with markers for the default 0.50 threshold and the empirical EER
-threshold. Designed so forensic examiners can see at a glance where the
-decision sits relative to defensible operating points.
+The screen exposes the deployed decision threshold and uncertainty band. It
+does not present an evaluation-only EER operating point as a competing case
+decision, which would be confusing for examiners.
 """
 import streamlit as st
 
@@ -16,13 +15,12 @@ def render_confidence_gauge(p_spoof: float,
 
     Args:
         p_spoof:           raw sigmoid output, in [0, 1]
-        eer_threshold:     operating point where APCER = BPCER
-                           (default 0.22 from your thesis evaluation)
+        eer_threshold:     retained for API compatibility; evaluation
+                            operating points belong in methodology
         uncertainty_band:  (lo, hi) range that should be marked as ambiguous
     """
     p_spoof = max(0.0, min(1.0, float(p_spoof)))
     pct = p_spoof * 100
-    eer_pct = eer_threshold * 100
     lo, hi = uncertainty_band
     band_left = lo * 100
     band_width = (hi - lo) * 100
@@ -31,7 +29,9 @@ def render_confidence_gauge(p_spoof: float,
 
     st.markdown(
         f"""
-        <div class='fsd-gauge'>
+        <div class='fsd-gauge' role='status'
+             aria-label='Model spoof score {p_spoof:.4f}; decision threshold 0.50'>
+          <div class='fsd-card-title'>Model spoof score</div>
           <div class='fsd-gauge-track'>
             <div class='fsd-gauge-uncertainty'
                  style='left:{band_left}%; width:{band_width}%'></div>
@@ -40,19 +40,17 @@ def render_confidence_gauge(p_spoof: float,
             <div class='fsd-gauge-marker fsd-gauge-marker-default' style='left:50%'>
               <span class='fsd-gauge-marker-label'>0.50 default</span>
             </div>
-            <div class='fsd-gauge-marker fsd-gauge-marker-eer' style='left:{eer_pct}%'>
-              <span class='fsd-gauge-marker-label'>{eer_threshold:.2f} EER</span>
-            </div>
             <div class='fsd-gauge-needle' style='left:{pct}%'></div>
           </div>
           <div class='fsd-gauge-scale'>
             <span>Live</span><span>Uncertain</span><span>Spoof</span>
           </div>
           <div class='fsd-gauge-readout'>
-            P(spoof) = <b style='color:{color}'>{p_spoof:.4f}</b>
-            &nbsp;·&nbsp; decision @ 0.50 = <b>{'SPOOF' if p_spoof >= 0.5 else 'LIVE'}</b>
-            &nbsp;·&nbsp; decision @ EER = <b>{'SPOOF' if p_spoof >= eer_threshold else 'LIVE'}</b>
+            Score = <b style='color:{color}'>{p_spoof:.4f}</b>
+            &nbsp;·&nbsp; threshold = <b>0.50</b>
+            &nbsp;·&nbsp; result = <b>{'SPOOF' if p_spoof >= 0.5 else 'LIVE'}</b>
           </div>
+          <div class='fsd-gauge-note'>A model score supports review; it is not a standalone forensic conclusion.</div>
         </div>
         """,
         unsafe_allow_html=True,

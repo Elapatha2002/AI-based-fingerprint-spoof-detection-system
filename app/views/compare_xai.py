@@ -49,7 +49,8 @@ def render():
             icon="🔬",
             message="No image loaded. Run an analysis first, or open this "
                     "view from a Single Result page.",
-            action_label="Go to Analyse  →",
+            title="Choose an analysis to compare",
+            action_label="Go to Analyze",
             action_page="analyze",
             key="empty_compare_start",
         )
@@ -88,7 +89,7 @@ def render():
     # 2x3 grid
     row1 = st.columns(3)
     with row1[0]:
-        st.image(img, caption="Original", use_container_width=True)
+        st.image(img, caption="Original", width="stretch")
         st.markdown(
             f"<div class='fsd-mono' style='font-size:11px;'>"
             f"{img.size[0]}x{img.size[1]} px · {filename}</div>",
@@ -96,7 +97,7 @@ def render():
         )
     with row1[1]:
         st.image(xai["gradcam"]["image"], caption="Grad-CAM++",
-                 use_container_width=True)
+                 width="stretch")
         st.markdown(
             f"<div class='fsd-mono' style='font-size:11px;'>"
             f"Top region: central ridge</div>",
@@ -122,7 +123,7 @@ def render():
     row2 = st.columns(3)
     with row2[0]:
         st.image(xai["shap"]["image"], caption="SHAP",
-                 use_container_width=True)
+                 width="stretch")
         st.markdown(
             "<div class='fsd-mono' style='font-size:11px;'>"
             "+ red = positive · − blue = negative</div>",
@@ -130,7 +131,7 @@ def render():
         )
     with row2[1]:
         st.image(xai["lime"]["image"], caption="LIME",
-                 use_container_width=True)
+                 width="stretch")
         st.markdown(
             "<div class='fsd-mono' style='font-size:11px;'>"
             "Top 5 superpixels highlighted</div>",
@@ -180,7 +181,7 @@ def render():
             f"{xai['lime']['compute_ms']/1000:.2f} s",
         ],
     })
-    st.dataframe(metrics_df, use_container_width=True, hide_index=True)
+    st.dataframe(metrics_df, width="stretch", hide_index=True)
 
     best = max(["gradcam", "shap", "lime"],
                key=lambda k: xai[k]["faithfulness"])
@@ -203,14 +204,14 @@ def render():
 
     a1, a2, _ = st.columns([1, 1, 4])
     with a1:
-        if st.button("⬇  Export CSV", use_container_width=True,
+        if st.button("⬇  Export CSV", width="stretch",
                      key="cmp_export"):
             csv = metrics_df.to_csv(index=False).encode("utf-8")
             st.download_button("Download metrics.csv", data=csv,
                                file_name=f"xai_comparison_{filename}.csv",
                                mime="text/csv", key="cmp_dl")
     with a2:
-        if st.button("Open in Result", use_container_width=True,
+        if st.button("Open in Result", width="stretch",
                      key="cmp_open"):
             st.session_state.current_single = {
                 "filename": filename,

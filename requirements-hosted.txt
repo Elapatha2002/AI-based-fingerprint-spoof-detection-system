@@ -1,0 +1,6 @@
+# Dependencies for the hosted Streamlit application, including real inference,
+# XAI, S3-compatible object storage, and environment-based configuration.
+-r app/requirements.txt
+-r src/requirements.txt
+boto3>=1.34.0
+python-dotenv>=1.0.0

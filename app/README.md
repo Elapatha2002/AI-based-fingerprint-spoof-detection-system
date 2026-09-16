@@ -32,6 +32,22 @@ streamlit run streamlit_app.py
 
 Open the URL it prints (usually http://localhost:8501).
 
+### Offline recovery mode (no AWS account or login required)
+
+If AWS storage or the previous application account is no longer available,
+run this from the project root in PowerShell:
+
+```powershell
+.\scripts\run_local_offline.ps1
+```
+
+The launcher binds the app to `127.0.0.1`, signs in only the local computer as
+the **Local Recovery Operator**, and writes new images, XAI heatmaps and reports
+to the gitignored `storage_local/` folder. It does not restore objects that
+were deleted from AWS; it lets you use and demonstrate the application safely
+without AWS credentials or a `.env` file. It uses the project’s local
+MobileNetV3 checkpoint by default; add `-Mock` if you only want the UI demo.
+
 ### 3. Try it
 
 - **Home** → click "Start Analysis"
@@ -184,4 +200,4 @@ Free tier supports CPU-only inference, which is fine for a demo.
 - History is in-session only (use SQLite later if needed)
 - PDF preview uses a base64-data iframe — works in Chrome/Edge, may be flaky in Firefox
 - Tables are read-only (use `st.data_editor` if you want inline editing)
-- No authentication — fine for a thesis demo
+- Offline recovery mode deliberately skips sign-in but is bound to local host only
