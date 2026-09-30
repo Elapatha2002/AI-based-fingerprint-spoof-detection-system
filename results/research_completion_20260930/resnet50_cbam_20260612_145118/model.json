@@ -1,0 +1,10 @@
+{
+  "label": "ResNet50 + CBAM",
+  "registry": "resnet50_cbam",
+  "checkpoint": "checkpoints\\resnet50_cbam_20260612_145118\\best.pth",
+  "checkpoint_sha256": "e1dc542f7fe1d3824b93eaf7f8f8ca5e72e45009be1b01458597a242eb4ed979",
+  "parameters": 26026593,
+  "reconstruction_options": {},
+  "strict_load": true,
+  "spatial_kernels": {}
+}

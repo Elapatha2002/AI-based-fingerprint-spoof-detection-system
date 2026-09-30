@@ -1,0 +1,10 @@
+{
+  "label": "MobileNetV3-Large",
+  "registry": "mobilenetv3_large",
+  "checkpoint": "checkpoints\\mobilenetv3_large_20260616_105902\\best.pth",
+  "checkpoint_sha256": "94e15797e137795b5d55672bbbe275269066c57d0f56f748ac583f962becf9a8",
+  "parameters": 4203313,
+  "reconstruction_options": {},
+  "strict_load": true,
+  "spatial_kernels": {}
+}

@@ -27,7 +27,11 @@ def log_action(action: str,
     if "audit_log" not in st.session_state:
         st.session_state.audit_log = []
 
-    actor = actor or st.session_state.get("form_examiner") or "System"
+    # The analysis form displays the authenticated account, not form_examiner.
+    # Do not attribute an action to a stale name left by a previous session.
+    from app.services import auth
+    user = auth.current_user() or {}
+    actor = actor or user.get("full_name") or user.get("username") or "Unattributed"
 
     entry = {
         "ts": datetime.now().isoformat(timespec="seconds"),

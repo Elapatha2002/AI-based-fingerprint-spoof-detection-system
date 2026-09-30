@@ -196,7 +196,7 @@ def update_case_status(case_id: str, status: str) -> None:
 def record_analysis(case_id: str, image_filename: str, image_s3_key: str,
                     model_name: str, verdict: str, confidence: float,
                     threshold_used: float = 0.5, inference_ms: float = 0.0,
-                    image_hash: str = "") -> str:
+                    image_hash: str = "", examiner: str = "") -> str:
     analysis_id = f"AN-{_uid()}"
     now = _now()
     with connect() as conn:
@@ -209,7 +209,7 @@ def record_analysis(case_id: str, image_filename: str, image_s3_key: str,
              model_name, verdict, confidence, threshold_used, inference_ms, now),
         )
         _log(conn, case_id=case_id, analysis_id=analysis_id,
-             action="analysed",
+             action="analysed", user=(examiner or "").strip() or "Unattributed",
              details=f"{model_name} → {verdict} ({confidence:.2%})")
     return analysis_id
 

@@ -1,0 +1,53 @@
+{
+  "label": "FSD-CBAM v1",
+  "registry": "fsd_cbam",
+  "checkpoint": "checkpoints\\fsd_cbam_20260708_144619\\best.pth",
+  "checkpoint_sha256": "6ce19f87ac0550935853f0a3e847c2ab9f5261025d06161d39cadad1a2923f7f",
+  "parameters": 31769363,
+  "reconstruction_options": {
+    "reduction_ratios": [
+      8,
+      16,
+      32
+    ]
+  },
+  "strict_load": true,
+  "spatial_kernels": {
+    "layer3.0.fsd_cbam.spatial.conv": [
+      11,
+      11
+    ],
+    "layer3.1.fsd_cbam.spatial.conv": [
+      11,
+      11
+    ],
+    "layer3.2.fsd_cbam.spatial.conv": [
+      11,
+      11
+    ],
+    "layer3.3.fsd_cbam.spatial.conv": [
+      11,
+      11
+    ],
+    "layer3.4.fsd_cbam.spatial.conv": [
+      11,
+      11
+    ],
+    "layer3.5.fsd_cbam.spatial.conv": [
+      11,
+      11
+    ],
+    "layer4.0.fsd_cbam.spatial.conv": [
+      7,
+      7
+    ],
+    "layer4.1.fsd_cbam.spatial.conv": [
+      7,
+      7
+    ],
+    "layer4.2.fsd_cbam.spatial.conv": [
+      7,
+      7
+    ]
+  }
+}

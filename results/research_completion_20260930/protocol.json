@@ -1,0 +1,59 @@
+{
+  "created_utc": "2026-09-30T14:22:19.323174+00:00",
+  "seed": 20260930,
+  "python": "3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "cpu": "AMD64 Family 25 Model 68 Stepping 1, AuthenticAMD",
+  "device": "cuda",
+  "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+  "torch_threads": 4,
+  "versions": {
+    "torch": "2.6.0+cu124",
+    "torchvision": "0.21.0+cu124",
+    "numpy": "2.4.3",
+    "pandas": "3.0.1",
+    "scipy": "1.17.1",
+    "scikit-image": "0.26.0",
+    "shap": "0.52.0",
+    "lime": "0.2.0.1",
+    "grad-cam": "1.5.5"
+  },
+  "manifest_sha256": "22faa1c180c79c3b3fd79f38d8e316755563352b3e8f0111e5e5a734f19ca632",
+  "sample_n": 52,
+  "strata": 26,
+  "per_stratum": 2,
+  "class_counts": {
+    "live": 26,
+    "spoof": 26
+  },
+  "justification": "Descriptive, balanced pilot: 2 images from each of 13 year-sensor groups and each class. 5.2 times the earlier 10-image panels; not a powered population estimate.",
+  "inference": {
+    "batch_size": 1,
+    "dtype": "float32",
+    "tf32": false,
+    "warmup": 10,
+    "repeats": 5,
+    "scope": "Synchronized model forward only; tensor already on device; excludes decode, preprocessing, transfers, UI and report creation."
+  },
+  "xai": {
+    "target": "predicted class at threshold 0.5, fixed before perturbation",
+    "background_n": 8,
+    "background_split": "train",
+    "lime_samples": 500,
+    "lime_segments": "SLIC n_segments=50 compactness=10 sigma=1 start_label=0",
+    "shap": "DeepExplainer with additivity check; GradientExplainer fallback (200 samples, batch 8), actual path and warnings recorded per image",
+    "steps": 20,
+    "baseline": "zero in normalized RGB space (ImageNet mean)",
+    "ranking": "absolute attribution; deterministic tie breaking",
+    "iou": "exact top 20% pixel count, not percentile threshold ties",
+    "timing_scope": "Synchronized explainer setup and heatmap computation; excludes rendering, disk I/O and faithfulness scoring. SHAP includes a failed DeepExplainer attempt when fallback is used."
+  },
+  "historical_metrics": "Existing full-test JSON metrics are retained, not re-estimated from this balanced XAI sample.",
+  "source_sha256": {
+    "scripts\\complete_research_evaluation.py": "a486216271324d0b69a81f509d2f2a84d9909af7ac1f27bdacb02015566210f3",
+    "src\\models\\factory.py": "bd970ec77f12cd5b733a31e3b33b87f8de9f792d018286767244fd62ef841ec1",
+    "src\\models\\fsd_cbam.py": "d0877983356aa80f8d3220c46baa5a146c5761688e350e035241e10d1ba9dd2f",
+    "src\\models\\resnet_fsd_cbam.py": "dd3acf510dfe8fd0142cc411ffa0a9cc21b3ab6c12747f2588ec96f07ee09172",
+    "src\\data\\transforms.py": "9253260573a64e4f4007a583051015974214ac7724bd6297c335c29aae41d641"
+  }
+}

@@ -90,6 +90,8 @@ def _load_model(model_name: str, ckpt_str: str) -> dict:
     clear_all_hooks(model)
 
     short = ckpt_path.parent.name
+    with ckpt_path.open("rb") as checkpoint_file:
+        checkpoint_sha256 = hashlib.file_digest(checkpoint_file, "sha256").hexdigest()
 
     return {
         "model": model,
@@ -97,6 +99,7 @@ def _load_model(model_name: str, ckpt_str: str) -> dict:
         "name": model_name,
         "checkpoint_path": str(ckpt_path),
         "checkpoint_short": short,
+        "checkpoint_sha256": checkpoint_sha256,
         "commit": short[-8:] if len(short) >= 8 else short,
     }
 
@@ -190,6 +193,7 @@ def predict(filename: str, image: Image.Image | None = None) -> dict:
         "label": label,
         "confidence": confidence,
         "raw_score": p_spoof,
+        "threshold_used": 0.5,
         "borderline": borderline,
         "material": material,
         "material_confidence": 0.80 if material else None,
@@ -209,6 +213,8 @@ def predict(filename: str, image: Image.Image | None = None) -> dict:
             "name": svc["name"],
             "version": "real",
             "commit": svc["commit"],
+            "checkpoint_short": svc["checkpoint_short"],
+            "checkpoint_sha256": svc["checkpoint_sha256"],
         },
     }
 

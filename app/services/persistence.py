@@ -86,7 +86,7 @@ def save_single_analysis(*, filename: str, image_bytes: bytes,
     session-state save still succeeds and the user sees no error.
     """
     case_id = meta.get("case_id") or "CASE-UNKNOWN"
-    examiner = meta.get("examiner", "")
+    examiner = (meta.get("examiner") or "").strip()
 
     try:
         _ensure_case(case_id, examiner)
@@ -108,6 +108,7 @@ def save_single_analysis(*, filename: str, image_bytes: bytes,
             threshold_used=float(result.get("threshold_used", 0.5)),
             inference_ms=float(result.get("timing_ms", {}).get("total", 0)),
             image_hash=_sha256(image_bytes),
+            examiner=examiner,
         )
 
         # 3. Optionally save XAI heatmaps

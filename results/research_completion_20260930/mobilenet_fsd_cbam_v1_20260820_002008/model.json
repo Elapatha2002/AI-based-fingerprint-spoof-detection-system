@@ -1,0 +1,27 @@
+{
+  "label": "Mobile-FSD-CBAM v1",
+  "registry": "mobilenet_fsd_cbam",
+  "checkpoint": "checkpoints\\mobilenet_fsd_cbam_v1_20260820_002008\\best.pth",
+  "checkpoint_sha256": "69b12e75d3165a0f1af6089b59171c0c90dc6fdd085a6c305fbf3f1cb1c2cc81",
+  "parameters": 4237065,
+  "reconstruction_options": {},
+  "strict_load": true,
+  "spatial_kernels": {
+    "features.12.fsd_cbam.spatial.conv": [
+      7,
+      7
+    ],
+    "features.13.fsd_cbam.spatial.conv": [
+      5,
+      5
+    ],
+    "features.14.fsd_cbam.spatial.conv": [
+      5,
+      5
+    ],
+    "features.15.fsd_cbam.spatial.conv": [
+      5,
+      5
+    ]
+  }
+}

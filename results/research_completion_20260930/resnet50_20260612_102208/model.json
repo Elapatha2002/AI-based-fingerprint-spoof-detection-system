@@ -1,0 +1,10 @@
+{
+  "label": "ResNet50",
+  "registry": "resnet50",
+  "checkpoint": "checkpoints\\resnet50_20260612_102208\\best.pth",
+  "checkpoint_sha256": "2183527df34435ab7f35d3c69a1b6d0f0385a175ad548b536b3f1a7ccc9b3a86",
+  "parameters": 23510081,
+  "reconstruction_options": {},
+  "strict_load": true,
+  "spatial_kernels": {}
+}

@@ -39,7 +39,7 @@ def render():
         "examiner": meta.get("examiner", "—"),
         "sensor": meta.get("sensor", "—"),
         "notes": meta.get("notes", ""),
-        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "timestamp": meta.get("timestamp"),
     }
 
     xai_panels = [
