@@ -115,7 +115,7 @@ def save_single_analysis(*, filename: str, image_bytes: bytes,
         if xai_panels:
             for method_key in ("gradcam", "shap", "lime"):
                 panel = xai_panels.get(method_key)
-                if not panel or "image" not in panel:
+                if not panel or panel.get('status') == 'error' or "image" not in panel:
                     continue
                 try:
                     heatmap_bytes = _pil_to_png(panel["image"])

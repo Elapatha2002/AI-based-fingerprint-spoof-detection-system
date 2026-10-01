@@ -16,6 +16,22 @@ SENSORS = [
 ]
 
 
+def _start_single(meta):
+    """Button callback: prepare the result before the next page render."""
+    from app.services import auth
+    with auth.render_scope():
+        user = auth.current_user()
+        data = st.session_state.get('single_source_bytes')
+        if not user or not data or not meta.get('case_id'):
+            return
+        meta = dict(meta, examiner=user['full_name'])
+        filename = st.session_state.get('single_source_filename') or 'capture.png'
+        st.session_state.current_single = dict(filename=filename, image_bytes=data, meta=meta)
+        log_action(action=f'Started analysis of {filename}', case_id=meta['case_id'],
+                   details=f"sensor={meta.get('sensor')}, source={st.session_state.get('single_source_kind')}")
+        st.session_state.current_page = 'single_result'
+
+
 def render():
     page_title("Analyze Fingerprint",
                "Follow the guided steps to prepare a single fingerprint or a batch for analysis.")
@@ -111,7 +127,6 @@ def _render_single_tab():
 
         # Ready if EITHER source provided image bytes + case_id + examiner
         source_bytes = st.session_state.get("single_source_bytes")
-        source_filename = st.session_state.get("single_source_filename")
         ready = (bool(source_bytes)
                  and bool(meta["case_id"])
                  and bool(meta["examiner"]))
@@ -121,24 +136,11 @@ def _render_single_tab():
         if not ready:
             st.caption("Add a valid fingerprint image and a case ID to continue.")
 
-        if st.button("Run analysis",
+        st.button("Run analysis",
                      type="primary",
                      disabled=not ready,
                      width="stretch",
-                     key="single_start"):
-            st.session_state.current_single = {
-                "filename": source_filename or "capture.png",
-                "image_bytes": source_bytes,
-                "meta": meta,
-            }
-            log_action(
-                action=f"Started analysis of {source_filename or 'sensor capture'}",
-                case_id=meta.get("case_id", "—"),
-                details=(f"sensor={meta.get('sensor')}, "
-                         f"source={st.session_state.get('single_source_kind')}"),
-            )
-            st.session_state.current_page = "single_result"
-            st.rerun()
+                     key="single_start", on_click=_start_single, args=(meta,))
 
 
 def _render_file_uploader():

@@ -24,14 +24,14 @@ def log_action(action: str,
         actor:   who did it (defaults to current examiner if set)
         details: free-form additional info shown after the action verb
     """
-    if "audit_log" not in st.session_state:
-        st.session_state.audit_log = []
-
     # The analysis form displays the authenticated account, not form_examiner.
     # Do not attribute an action to a stale name left by a previous session.
     from app.services import auth
     user = auth.current_user() or {}
     actor = actor or user.get("full_name") or user.get("username") or "Unattributed"
+    # Session validation can revoke and clear a disabled account's state.
+    if "audit_log" not in st.session_state:
+        st.session_state.audit_log = []
 
     entry = {
         "ts": datetime.now().isoformat(timespec="seconds"),
@@ -42,7 +42,7 @@ def log_action(action: str,
     }
     st.session_state.audit_log.append(entry)
 
-    # Best-effort dual write to SQLite so the audit trail survives restarts.
+    # Best-effort dual write to the database so the audit trail survives restarts.
     # A DB outage must not break the UI, so all failures are swallowed.
     try:
         from app.services import database

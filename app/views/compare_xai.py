@@ -86,6 +86,12 @@ def render():
         result = _cached_predict(filename, image_bytes)
         xai = _cached_explain(filename, image_bytes)
 
+    if any(p.get('status') == 'error' for p in xai.values()):
+        from components.xai_views import xai_tabs
+        st.warning('Explanation generation is incomplete. Method rankings are unavailable.')
+        xai_tabs(xai, original_image=img)
+        return
+
     # 2x3 grid
     row1 = st.columns(3)
     with row1[0]:

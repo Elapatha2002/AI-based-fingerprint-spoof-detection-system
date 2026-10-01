@@ -1002,6 +1002,71 @@ div[data-testid="stMetric"] {
   text-align: center;
 }
 
+/* Login only: a single compact card, with one focus ring per composite input.
+   An outline on the inner password input was clipped beside the reveal button,
+   producing a white vertical bar. Keep the outer focus ring and toggle focus. */
+.st-key-login_panel {
+  width: 100% !important;
+  max-width: 420px !important;
+  margin-inline: auto !important;
+}
+.st-key-login_panel .fsd-login-intro { margin: 28px 0 16px; }
+.st-key-login_panel .fsd-login-title {
+  padding: 0;
+  margin: 12px 0 0;
+  font-size: 26px;
+  line-height: 1.3;
+}
+.st-key-login_card {
+  padding: 24px !important;
+  border-radius: 12px !important;
+}
+.st-key-login_panel [data-testid="InputInstructions"] {
+  display: none !important;
+}
+.st-key-login_panel [data-baseweb="input"] {
+  min-height: 46px;
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-strong) !important;
+  border-radius: 8px !important;
+}
+.st-key-login_panel [data-baseweb="input"]:focus-within {
+  border-color: var(--accent-info) !important;
+  outline: 2px solid #A9D3FF !important;
+  outline-offset: 2px !important;
+}
+.st-key-login_panel [data-baseweb="input"] > div,
+.st-key-login_panel [data-baseweb="input"] > div:focus-within {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+.st-key-login_panel [data-baseweb="input"] input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+.st-key-login_panel [data-baseweb="input"] button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0 !important;
+  background: transparent !important;
+}
+.st-key-login_panel [data-baseweb="input"] button:focus-visible {
+  outline: 2px solid #A9D3FF !important;
+  outline-offset: -4px !important;
+}
+.st-key-login_panel [data-testid="stFormSubmitButton"] button {
+  min-height: 46px;
+  color: #06101A !important;
+  font-weight: 600;
+  border-radius: 8px;
+}
+@media (max-width: 480px) {
+  .st-key-login_card { padding: 20px !important; }
+  .st-key-login_panel .fsd-login-intro { margin-top: 12px; }
+}
+
 /* The status content remains available without covering controls. */
 .fsd-status {
   position: static !important;

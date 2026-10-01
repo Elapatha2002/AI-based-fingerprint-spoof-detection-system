@@ -25,6 +25,11 @@ def _single_panel(panel: dict, name: str, original_image, legend: str):
     if panel is None:
         st.info(f"No {name} output available.")
         return
+    if panel.get('status') == 'error':
+        st.error(f"{name} explanation is unavailable: {panel.get('error', 'Unknown error')}")
+        st.caption('For missing Python packages, stop the app and run: '
+                   'python -m pip install -r requirements-hosted.txt. Then restart the app.')
+        return
 
     cols = st.columns(2)
     with cols[0]:

@@ -46,6 +46,10 @@ def render_xai_interpretation(xai_panels: dict,
                               verdict_label: str,
                               p_spoof: float) -> None:
     """Render the guided interpretation panel."""
+    if any(p.get('status') == 'error' for p in xai_panels.values()):
+        st.warning('Explanation generation is incomplete. Cross-method agreement '
+                   'cannot be interpreted until all explanation methods are available.')
+        return
     agreement = _cross_method_agreement(xai_panels)
     methods_agree = agreement >= 0.30           # IoU threshold for "agreement"
     is_borderline = 0.40 <= p_spoof <= 0.60

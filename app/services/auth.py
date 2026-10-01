@@ -21,6 +21,8 @@ import os
 import secrets
 from pathlib import Path
 from typing import Optional
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -38,10 +40,29 @@ PBKDF2_ALGO = "sha256"
 SALT_BYTES = 16
 MIN_PASSWORD_LEN = 8
 
+# One validation per render, never a cross-request/TTL permission cache.
+# ContextVar isolates concurrent Streamlit session threads.
+_render_identity = ContextVar('fsd_render_identity', default=None)
+
+
+@contextmanager
+def render_scope():
+    token = _render_identity.set({})
+    try:
+        yield
+    finally:
+        _render_identity.reset(token)
+
+
+def _invalidate_identity():
+    memo = _render_identity.get()
+    if memo is not None:
+        memo.clear()
+
 
 def offline_mode_enabled() -> bool:
     """Return whether the loopback-only local recovery launcher is in use."""
-    return os.environ.get("FSDXAI_OFFLINE_MODE", "").strip().lower() in {
+    return not database.using_postgres() and os.environ.get("FSDXAI_OFFLINE_MODE", "").strip().lower() in {
         "1", "true", "yes", "on"
     }
 
@@ -102,7 +123,9 @@ def seed_super_admin_if_needed() -> Optional[str]:
     Returns the new user_id, or None if not seeded (table already had users
     or the .env values were missing).
     """
-    if offline_mode_enabled() or database.user_count() > 0:
+    # Cloud accounts are provisioned explicitly by the setup wizard. Do not
+    # reuse legacy INITIAL_ADMIN_* secrets after switching backends.
+    if database.using_postgres() or offline_mode_enabled() or database.user_count() > 0:
         return None
 
     username = os.environ.get("INITIAL_ADMIN_USERNAME", "").strip()
@@ -120,10 +143,9 @@ def seed_super_admin_if_needed() -> Optional[str]:
                        f"(min {MIN_PASSWORD_LEN} chars). Skipping seed.")
         return None
 
-    user_id = database.create_user(
+    user_id = database.bootstrap_admin(
         username=username,
         password_hash=hash_password(password),
-        role="super_admin",
         full_name=full_name,
     )
     logger.info(f"Seeded super admin '{username}' (id={user_id})")
@@ -138,7 +160,27 @@ def current_user() -> Optional[dict]:
         # The local launcher binds the server to 127.0.0.1. Do not create,
         # reset, or expose a persisted password just to run the demo locally.
         st.session_state["current_user"] = _offline_operator()
-    return st.session_state.get("current_user")
+        return st.session_state['current_user']
+    cached = st.session_state.get('current_user')
+    if not cached:
+        return None
+    memo = _render_identity.get()
+    identity = (cached.get('user_id'), cached.get('session_version', 0))
+    if memo is not None and memo.get('identity') == identity:
+        return memo['user']
+    try:
+        fresh = database.get_user(cached.get('user_id'))
+    except Exception:
+        fresh = None  # Fail closed on database outage, not cached privileges.
+    if (not fresh or not fresh['active'] or
+            fresh['session_version'] != cached.get('session_version', 0)):
+        st.session_state.clear()
+        return None
+    public = {k: v for k, v in fresh.items() if k != 'password_hash'}
+    st.session_state['current_user'] = public
+    if memo is not None:
+        memo.update(identity=identity, user=public)
+    return public
 
 
 def is_logged_in() -> bool:
@@ -158,10 +200,15 @@ def is_examiner() -> bool:
 def login(username: str, password: str) -> tuple[bool, str]:
     """Attempt login. On success, stores user in session and returns (True, '').
     On failure, returns (False, error_message)."""
+    _invalidate_identity()
     if not username or not password:
         return False, "Username and password are required."
 
-    user = database.get_user_by_username(username.strip())
+    st.session_state.pop('current_user', None)
+    try:
+        user = database.get_user_by_username(username.strip())
+    except Exception:
+        return False, 'Database unavailable. Please try again or contact your administrator.'
     if not user:
         return False, "Invalid username or password."
     if not user.get("active"):
@@ -171,6 +218,7 @@ def login(username: str, password: str) -> tuple[bool, str]:
 
     # Success — strip password_hash before storing in session state
     user_copy = {k: v for k, v in user.items() if k != "password_hash"}
+    st.session_state.clear()  # Do not retain a previous examiner's case context.
     st.session_state["current_user"] = user_copy
     try:
         database.touch_last_login(user["user_id"])
@@ -181,12 +229,11 @@ def login(username: str, password: str) -> tuple[bool, str]:
 
 def logout() -> None:
     """Clear the session's current_user (and related derived values)."""
+    _invalidate_identity()
     if offline_mode_enabled():
         # The recovery operator is restored at the next app rerun.
         return
-    for key in ("current_user", "form_examiner"):
-        if key in st.session_state:
-            del st.session_state[key]
+    st.session_state.clear()
 
 
 def require_role(role: str) -> bool:
@@ -200,3 +247,48 @@ def require_role(role: str) -> bool:
         st.error(f"Access denied — requires role '{role}'.")
         return False
     return True
+
+
+def _account_action(operation, *, target_id=None, values=None):
+    user = current_user()
+    if not user or user.get('offline_mode'):
+        raise PermissionError('Sign in with a database account to manage users.')
+    try:
+        return database.manage_account(user['user_id'], user['session_version'], operation,
+                                       target_id=target_id, values=values)
+    finally:
+        _invalidate_identity()
+
+
+def create_account(*, username, password, role, full_name, email=''):
+    error = password_error(password)
+    if error:
+        raise ValueError(error)
+    return _account_action('create', values=dict(username=username.strip(),
+        password_hash=hash_password(password), role=role, full_name=full_name.strip(), email=email.strip()))
+
+
+def update_account(user_id, **updates):
+    password = updates.pop('password', None)
+    if 'password_hash' in updates:
+        raise ValueError('Supply a password, not a password hash.')
+    if password is not None:
+        error = password_error(password)
+        if error:
+            raise ValueError(error)
+        updates['password_hash'] = hash_password(password)
+    return _account_action('update', target_id=user_id, values=updates)
+
+
+def delete_account(user_id, confirmation):
+    return _account_action('delete', target_id=user_id, values={'confirmation': confirmation})
+
+
+def change_password(current_password, new_password):
+    error = password_error(new_password)
+    if error:
+        raise ValueError(error)
+    result = _account_action('own_password', values=dict(current_password=current_password,
+                            password_hash=hash_password(new_password)))
+    logout()
+    return result

@@ -1,14 +1,18 @@
-"""Settings — super-admin only. Manage examiner accounts."""
+"""Super-admin account management and examiner self-service password changes."""
 import streamlit as st
+from html import escape
 
 from components.cards import page_title, banner
 from components.model_picker import render_model_picker
-from components.audit import log_action
 from app.services import auth, database
 
 
 def render():
-    if not auth.require_role("super_admin"):
+    if not auth.is_logged_in():
+        return
+    if not auth.is_super_admin():
+        page_title('My account', 'Review your account and change your password.')
+        _render_my_account()
         return
 
     page_title("User management",
@@ -39,6 +43,17 @@ def render():
         _render_my_account()
 
 
+def _account_change(function, *args, **kwargs):
+    try:
+        function(*args, **kwargs)
+        return True
+    except (PermissionError, ValueError) as error:
+        st.error(str(error))
+    except Exception:
+        st.error('The account change could not be saved. Check the database connection and try again.')
+    return False
+
+
 def _render_user_list():
     st.markdown(
         "<div class='fsd-section-h'>Existing accounts</div>",
@@ -55,9 +70,9 @@ def _render_user_list():
             top = st.columns([2, 2, 1, 1, 1, 1])
             with top[0]:
                 st.markdown(
-                    f"<div style='font-size:14px;font-weight:600;'>{u['full_name']}</div>"
+                    f"<div style='font-size:14px;font-weight:600;'>{escape(u['full_name'])}</div>"
                     f"<div class='fsd-mono' style='color:var(--text-muted);font-size:12px;'>"
-                    f"@{u['username']}</div>",
+                    f"@{escape(u['username'])}</div>",
                     unsafe_allow_html=True,
                 )
             with top[1]:
@@ -120,11 +135,8 @@ def _render_user_list():
                         st.session_state[confirm_key] = True
                         st.rerun()
                     else:
-                        database.update_user(u["user_id"], active=new_active)
-                        log_action(
-                            action=f"{verb}d user {u['username']}",
-                            details=f"role={u['role']}",
-                        )
+                        if not _account_change(auth.update_account, u['user_id'], active=new_active):
+                            return
                         st.session_state.pop(confirm_key, None)
                         st.rerun()
 
@@ -145,6 +157,16 @@ def _render_user_list():
             if st.session_state.get(f"editing_{u['user_id']}"):
                 _render_edit_panel(u, is_last_admin=is_last_admin,
                                    is_self=is_self)
+
+            with st.expander(f"Delete account @{u['username']}"):
+                st.warning('Deletion permanently removes this login account, not its cases or audit records. '
+                           'Disable the account instead if access may be needed again.')
+                confirmation = st.text_input('Type the exact username to confirm',
+                    key=f"delete_confirmation_{u['user_id']}")
+                if st.button('Delete account permanently', key=f"delete_{u['user_id']}",
+                             disabled=is_self or is_last_admin):
+                    if _account_change(auth.delete_account, u['user_id'], confirmation):
+                        st.rerun()
 
 
 def _render_edit_panel(u: dict, *, is_last_admin: bool, is_self: bool):
@@ -199,6 +221,9 @@ def _render_edit_panel(u: dict, *, is_last_admin: bool, is_self: bool):
     with save:
         if st.button("Save changes", type="primary",
                       key=f"sv_{u['user_id']}", width="stretch"):
+            if not new_full_name.strip():
+                st.error('Full name is required.')
+                return
             updates = {}
             if new_full_name.strip() and new_full_name != u["full_name"]:
                 updates["full_name"] = new_full_name.strip()
@@ -214,14 +239,11 @@ def _render_edit_panel(u: dict, *, is_last_admin: bool, is_self: bool):
                 if new_pwd != confirm_pwd:
                     st.error("Passwords do not match.")
                     return
-                updates["password_hash"] = auth.hash_password(new_pwd)
+                updates["password"] = new_pwd
 
             if updates:
-                database.update_user(u["user_id"], **updates)
-                log_action(
-                    action=f"Updated user {u['username']}",
-                    details=", ".join(sorted(updates.keys())),
-                )
+                if not _account_change(auth.update_account, u['user_id'], **updates):
+                    return
                 st.success("Changes saved.")
                 st.session_state[f"editing_{u['user_id']}"] = False
                 st.rerun()
@@ -291,18 +313,15 @@ def _render_add_user_form():
                 st.error("Passwords do not match.")
                 return
 
-            uid = database.create_user(
+            saved = _account_change(auth.create_account,
                 username=username.strip(),
-                password_hash=auth.hash_password(password),
+                password=password,
                 role=role,
                 full_name=full_name.strip(),
                 email=email.strip(),
             )
-            log_action(
-                action=f"Created user {username}",
-                details=f"role={role}, id={uid}",
-            )
-            st.success(f"User '{username}' created.")
+            if saved:
+                st.success(f"User '{username}' created. Open the Users tab to manage the account.")
 
 
 def _render_my_account():
@@ -322,10 +341,10 @@ def _render_my_account():
     st.markdown(
         f"""
         <div style='font-size:14px;line-height:2;'>
-          <b>Username:</b> {fresh['username']}<br/>
-          <b>Full name:</b> {fresh['full_name']}<br/>
+          <b>Username:</b> {escape(fresh['username'])}<br/>
+          <b>Full name:</b> {escape(fresh['full_name'])}<br/>
           <b>Role:</b> {fresh['role']}<br/>
-          <b>Email:</b> {fresh.get('email') or '—'}<br/>
+          <b>Email:</b> {escape(fresh.get('email') or '—')}<br/>
           <b>Last login:</b> {fresh.get('last_login') or 'never'}
         </div>
         """,
@@ -356,7 +375,5 @@ def _render_my_account():
             if new_pwd != confirm_pwd:
                 st.error("New passwords do not match.")
                 return
-            database.update_user(me["user_id"],
-                                  password_hash=auth.hash_password(new_pwd))
-            log_action(action="Changed own password")
-            st.success("Password updated.")
+            if _account_change(auth.change_password, current_pwd, new_pwd):
+                st.rerun()

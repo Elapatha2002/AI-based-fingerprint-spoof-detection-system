@@ -1,5 +1,14 @@
 # FSD-XAI — Streamlit Frontend
 
+## Supabase database and examiner accounts
+
+For the current Supabase setup, follow the
+[step-by-step guide](../docs/deployment/SUPABASE_SETUP.md).
+From the project root, install `requirements-supabase.txt`, then run
+`python -m app.setup_supabase`. The wizard creates the first super admin;
+Settings provides examiner creation, editing, password reset, disabling and
+confirmed deletion. Do not share `.env.supabase` or enter credentials in chat.
+
 Forensic-lab dark-mode Streamlit prototype for the **Explainable Fingerprint
 Spoof Detection System for Digital Forensics** project (BSc Hons Software
 Engineering — NSBM Green University).

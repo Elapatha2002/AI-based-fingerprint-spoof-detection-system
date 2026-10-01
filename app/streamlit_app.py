@@ -12,6 +12,11 @@ HERE = Path(__file__).parent.resolve()
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
+# Load the selected backend before view imports can load legacy .env values.
+from dotenv import load_dotenv
+load_dotenv(HERE.parent / '.env.supabase')
+load_dotenv(HERE.parent / '.env')
+
 import streamlit as st  # noqa: E402
 
 st.set_page_config(
@@ -50,21 +55,19 @@ PAGES = {
 }
 
 
-# Bootstrap: seed super admin from .env if users table is empty.
-# Runs once per process. Streamlit reruns the whole script on each event,
-# so we guard with a module-level flag.
-_BOOTSTRAP_DONE = False
-
-
 def _bootstrap_once():
-    global _BOOTSTRAP_DONE
-    if _BOOTSTRAP_DONE:
+    # Supabase was provisioned by the wizard. Login validates connectivity;
+    # do not open another cloud connection just to inspect the schema on clicks.
+    if auth.database.using_postgres():
+        return
+    if st.session_state.get('_local_db_ready'):
         return
     try:
+        auth.database.init_db()
         auth.seed_super_admin_if_needed()
     except Exception:
-        pass
-    _BOOTSTRAP_DONE = True
+        return  # Retry on the next interaction if local setup failed.
+    st.session_state['_local_db_ready'] = True
 
 
 def main():
@@ -81,10 +84,7 @@ def main():
 
     page_key = st.session_state.get("current_page", "home")
 
-    # Role guard for admin-only pages
-    if page_key == "settings" and not auth.is_super_admin():
-        st.session_state.current_page = "home"
-        page_key = "home"
+    # Settings renders only My account for examiners; mutations recheck roles.
 
     render_fn = PAGES.get(page_key, home.render)
     render_fn()
@@ -93,4 +93,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    with auth.render_scope():
+        main()

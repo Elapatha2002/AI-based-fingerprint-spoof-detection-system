@@ -69,8 +69,15 @@ def render(from_drilldown: bool = False, drilldown_meta: dict | None = None):
         f"Forensic spoof detection · explainable AI",
     )
 
-    with st.spinner("Running classifier..."):
-        result = _cached_predict(filename, image_bytes or b"")
+    try:
+        with st.spinner("Running fingerprint classifier..."):
+            result = _cached_predict(filename, image_bytes or b"")
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception('Fingerprint classification failed')
+        st.error('Analysis could not complete. Check the selected model and checkpoint '
+                 'in Settings. The application terminal contains the error details.')
+        return
 
     # Audit the classification once per (filename, case_id) combination
     audit_key = f"audit_classify_{meta.get('case_id', '—')}_{filename}"
@@ -179,7 +186,9 @@ def render(from_drilldown: bool = False, drilldown_meta: dict | None = None):
     a1, a2, a3, _ = st.columns([1, 1, 1, 3])
     with a1:
         if st.button("Generate report", type="primary",
-                     width="stretch", key="sr_report"):
+                     width="stretch", key="sr_report",
+                     disabled=any(p.get('status') == 'error' for p in xai_panels.values()),
+                     help='All explanation methods must complete before generating an XAI report.'):
             log_action(
                 action=f"Initiated report generation for {filename}",
                 case_id=meta.get("case_id", "—"),

@@ -1,5 +1,5 @@
 """
-SQLite persistence for the FSD-XAI forensic app.
+SQLite or private Supabase/PostgreSQL persistence for the FSD-XAI app.
 
 Stores case metadata, analysis records, XAI output pointers, and audit
 events. Files themselves live in S3 (see storage.py); this module only
@@ -30,8 +30,16 @@ from typing import Any, Optional
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env.supabase")
 load_dotenv(PROJECT_ROOT / ".env")
 
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+
+
+def using_postgres() -> bool:
+    if DATABASE_URL and not DATABASE_URL.startswith(('postgresql://', 'postgres://')):
+        raise ValueError('DATABASE_URL must be a PostgreSQL connection URL.')
+    return bool(DATABASE_URL)
 
 DB_PATH = Path(os.environ.get("DATABASE_PATH", "./fsd_xai.db"))
 if not DB_PATH.is_absolute():
@@ -87,7 +95,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     event_id     TEXT PRIMARY KEY,
     case_id      TEXT,
     analysis_id  TEXT,
-    user         TEXT,
+    "user"       TEXT,
     action       TEXT NOT NULL,             -- created | analysed | viewed | exported | deleted
     details      TEXT,
     created_at   TEXT NOT NULL
@@ -102,7 +110,8 @@ CREATE TABLE IF NOT EXISTS users (
     email          TEXT,
     active         INTEGER NOT NULL DEFAULT 1,
     created_at     TEXT NOT NULL,
-    last_login     TEXT
+    last_login     TEXT,
+    session_version INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_analyses_case ON analyses(case_id);
@@ -124,7 +133,12 @@ def _uid() -> str:
 
 @contextmanager
 def connect():
-    """Context-managed SQLite connection with sane defaults."""
+    """Select the configured backend. Never fall back after a cloud failure."""
+    if using_postgres():
+        from app.services.postgres_backend import connect as pg_connect
+        with pg_connect(DATABASE_URL) as conn:
+            yield conn
+        return
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -140,10 +154,17 @@ def connect():
 
 
 def init_db() -> None:
-    """Create tables if they don't yet exist. Idempotent."""
+    """Initialise local SQLite, or verify the explicitly provisioned PG schema."""
+    if using_postgres():
+        with connect() as conn:
+            conn.execute('SELECT session_version FROM users LIMIT 0')
+        return
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with connect() as conn:
         conn.executescript(SCHEMA)
+        columns = {r['name'] for r in conn.execute('PRAGMA table_info(users)')}
+        if 'session_version' not in columns:
+            conn.execute('ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0')
 
 
 # ── Cases ─────────────────────────────────────────────────────────────
@@ -292,7 +313,7 @@ def _log(conn: sqlite3.Connection, action: str,
          case_id: str = "", analysis_id: str = "",
          user: str = "", details: str = "") -> None:
     conn.execute(
-        "INSERT INTO audit_log (event_id, case_id, analysis_id, user, "
+        'INSERT INTO audit_log (event_id, case_id, analysis_id, "user", '
         "action, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (f"EV-{_uid()}", case_id, analysis_id, user, action, details, _now()),
     )
@@ -375,21 +396,53 @@ def update_user(user_id: str, *, full_name: Optional[str] = None,
                 email: Optional[str] = None, role: Optional[str] = None,
                 active: Optional[int] = None,
                 password_hash: Optional[str] = None) -> None:
+    updates = dict(full_name=full_name, email=email, role=role, active=active,
+                   password_hash=password_hash)
+    with connect() as conn:
+        _lock_users(conn)
+        _update_account(conn, user_id, updates)
+
+
+def _lock_users(conn):
+    # Serialize role/status changes, including concurrent last-admin removal.
+    conn.execute('LOCK TABLE users IN SHARE ROW EXCLUSIVE MODE' if using_postgres()
+                 else 'BEGIN IMMEDIATE')
+
+
+def _protect_last_admin(conn, user_id, *, removing=False, role=None, active=None):
+    target = conn.execute('SELECT * FROM users WHERE user_id = ?', (user_id,)).fetchone()
+    if not target:
+        raise ValueError('Account no longer exists.')
+    loses_access = removing or role == 'examiner' or active == 0
+    if target['role'] == 'super_admin' and target['active'] and loses_access:
+        count = conn.execute("SELECT COUNT(*) AS n FROM users WHERE role = 'super_admin' AND active = 1").fetchone()['n']
+        if count <= 1:
+            raise ValueError('Cannot remove, disable or demote the last active super admin.')
+    return target
+
+
+def _update_account(conn, user_id, updates):
+    allowed = {'full_name', 'email', 'role', 'active', 'password_hash'}
+    if set(updates) - allowed:
+        raise ValueError('Unsupported account field.')
+    if updates.get('role') is not None and updates['role'] not in ('examiner', 'super_admin'):
+        raise ValueError('Invalid account role.')
+    if updates.get('active') is not None and updates['active'] not in (0, 1):
+        raise ValueError('Invalid account status.')
+    if updates.get('full_name') is not None and not updates['full_name'].strip():
+        raise ValueError('Full name is required.')
+    _protect_last_admin(conn, user_id, role=updates.get('role'), active=updates.get('active'))
     fields, params = [], []
-    for name, value in [("full_name", full_name), ("email", email),
-                        ("role", role), ("active", active),
-                        ("password_hash", password_hash)]:
+    for name, value in updates.items():
         if value is not None:
             fields.append(f"{name} = ?")
             params.append(value)
     if not fields:
         return
+    if any(updates.get(k) is not None for k in ('role', 'active', 'password_hash')):
+        fields.append('session_version = session_version + 1')
     params.append(user_id)
-    with connect() as conn:
-        conn.execute(
-            f"UPDATE users SET {', '.join(fields)} WHERE user_id = ?",
-            params,
-        )
+    conn.execute(f"UPDATE users SET {', '.join(fields)} WHERE user_id = ?", params)
 
 
 def touch_last_login(user_id: str) -> None:
@@ -399,11 +452,76 @@ def touch_last_login(user_id: str) -> None:
 
 
 def delete_user(user_id: str) -> None:
-    """Hard delete. Prefer update_user(active=0) to preserve audit trail."""
+    """Trusted maintenance primitive; UI must use auth.delete_account instead."""
     with connect() as conn:
+        _lock_users(conn)
+        _protect_last_admin(conn, user_id, removing=True)
         conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
 
 
-# ── One-liner init when imported ──────────────────────────────────────
+def bootstrap_admin(username, password_hash, full_name):
+    """One-time provisioning only; cannot overwrite any existing account."""
+    with connect() as conn:
+        _lock_users(conn)
+        if conn.execute('SELECT COUNT(*) AS n FROM users').fetchone()['n']:
+            return None
+        user_id = f'USR-{_uid()}'
+        conn.execute("INSERT INTO users (user_id, username, password_hash, role, full_name, active, created_at) VALUES (?, ?, ?, 'super_admin', ?, 1, ?)",
+                     (user_id, username, password_hash, full_name, _now()))
+        _log(conn, action='admin_bootstrapped', user=user_id,
+             details=f'Initial super admin: {username}')
+        return user_id
 
-init_db()
+
+def manage_account(actor_id, session_version, operation, *, target_id=None, values=None):
+    """Authorised user mutation plus audit, in one serialized transaction.
+
+    actor_id/version come from the authenticated server session, never a form.
+    Low-level create_user/update_user are reserved for trusted local maintenance.
+    """
+    values = dict(values or {})
+    with connect() as conn:
+        _lock_users(conn)
+        actor = conn.execute('SELECT * FROM users WHERE user_id = ?', (actor_id,)).fetchone()
+        if not actor or not actor['active'] or actor['session_version'] != session_version:
+            raise PermissionError('Your session expired. Sign in again.')
+        if operation != 'own_password' and actor['role'] != 'super_admin':
+            raise PermissionError('Only a super admin can manage accounts.')
+        if operation == 'create':
+            if set(values) != {'username', 'password_hash', 'full_name', 'email', 'role'}:
+                raise ValueError('Invalid account fields.')
+            if not values['username'].strip() or not values['full_name'].strip():
+                raise ValueError('Username and full name are required.')
+            if values['role'] not in ('examiner', 'super_admin'):
+                raise ValueError('Invalid account role.')
+            if conn.execute('SELECT user_id FROM users WHERE username = ?', (values['username'],)).fetchone():
+                raise ValueError('Username is already taken.')
+            target_id = f'USR-{_uid()}'
+            conn.execute('INSERT INTO users (user_id, username, password_hash, role, full_name, email, active, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)',
+                         (target_id, values['username'], values['password_hash'], values['role'], values['full_name'], values['email'], _now()))
+        elif operation == 'update':
+            if target_id == actor_id and values.get('active') == 0:
+                raise ValueError('You cannot disable your own account.')
+            _update_account(conn, target_id, values)
+        elif operation == 'delete':
+            if target_id == actor_id:
+                raise ValueError('You cannot delete your own account.')
+            target = _protect_last_admin(conn, target_id, removing=True)
+            if values.get('confirmation') != target['username']:
+                raise ValueError('Type the exact username to confirm deletion.')
+            # No case/analysis/audit rows are deleted. Their recorded attribution stays.
+            conn.execute('DELETE FROM users WHERE user_id = ?', (target_id,))
+        elif operation == 'own_password':
+            from app.services.auth import verify_password
+            if not verify_password(values.get('current_password', ''), actor['password_hash']):
+                raise ValueError('Current password is incorrect.')
+            target_id = actor_id
+            _update_account(conn, actor_id, {'password_hash': values['password_hash']})
+        else:
+            raise ValueError('Unknown account operation.')
+        _log(conn, action=f'user_{operation}', user=actor_id,
+             details=f'actor={actor["username"]}; target={target_id}')
+        return target_id
+
+
+# Schema setup is explicit; importing this module never changes a database.

@@ -30,6 +30,7 @@ class ReportingRegressionTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix='fsd_reporting_tests_')
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
+        self.enterContext(patch.object(database, 'DATABASE_URL', ''))
         self.enterContext(patch.object(database, 'DB_PATH', self.root/'test.db'))
         self.enterContext(patch.dict(os.environ, {'FSDXAI_OFFLINE_MODE': '0'}))
         database.init_db()
@@ -89,6 +90,21 @@ class ReportingRegressionTests(unittest.TestCase):
         self.assertIn('Practitioner validation has not been established', text)
         self.assertIn('does not establish legal admissibility', text)
 
+    def test_audit_survives_revoked_session(self):
+        self.session['current_user'] = {'user_id': 'deleted-user'}
+        self.session['current_single'] = {'private': 'previous examiner'}
+        audit.log_action('viewed')
+        self.assertNotIn('current_single', self.session)
+        self.assertEqual(self.session['audit_log'][0]['actor'], 'Unattributed')
+
+    def test_failed_explanation_is_not_saved_as_evidence_heatmap(self):
+        analysis_id = persistence.save_single_analysis(
+            filename='fixture.png', image_bytes=self.image, meta=self.meta,
+            result=self.result, xai_panels={'gradcam': {
+                'status': 'error', 'image': self.image, 'faithfulness': 0.0}})
+        self.assertIsNotNone(analysis_id)
+        self.assertEqual(database.list_xai_for_analysis(analysis_id), [])
+
     def test_loaded_checkpoint_provenance_reaches_prediction_and_pdf(self):
         import torch
         from app.services import real_model
@@ -143,7 +159,8 @@ class ReportingRegressionTests(unittest.TestCase):
         self.assertEqual(database.get_audit_trail(analysis_id=analysis_id)[0]['user'], 'Unattributed')
 
     def test_ui_audit_uses_current_account_not_stale_form_name(self):
-        self.session.update(current_user={'full_name': 'Current Examiner'}, form_examiner='Previous Examiner')
+        user_id = database.create_user('current', 'unused-test-hash', 'examiner', 'Current Examiner')
+        self.session.update(current_user={'user_id': user_id, 'session_version': 0}, form_examiner='Previous Examiner')
         audit.log_action('Viewed result', case_id=self.meta['case_id'])
         self.assertEqual(self.session.audit_log[-1]['actor'], 'Current Examiner')
         self.assertEqual(database.get_audit_trail(case_id=self.meta['case_id'])[0]['user'], 'Current Examiner')

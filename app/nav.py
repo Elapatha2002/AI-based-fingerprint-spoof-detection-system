@@ -17,6 +17,18 @@ ADMIN_NAV = [
     ("settings", "Settings"),
 ]
 
+# Detail pages belong to a navigation section, but are not navigation targets.
+PAGE_SECTION = dict(single_result='analyze', processing='analyze',
+                    batch_dashboard='analyze', drilldown='analyze',
+                    report_preview='analyze')
+
+
+def _navigate(labels_to_pages):
+    target = labels_to_pages.get(st.session_state.get('main_navigation'))
+    if target:
+        st.session_state.current_page = target
+        st.session_state['_nav_synced_page'] = target
+
 
 def render_nav():
     """Render a responsive, labelled application header and navigation.
@@ -33,11 +45,14 @@ def render_nav():
     items = list(BASE_NAV)
     if user and user.get("role") == "super_admin":
         items = items + list(ADMIN_NAV)
+    elif user:
+        items.append(('settings', 'My account'))
 
     current = st.session_state.get("current_page", "home")
     labels_to_pages = {label: page_key for page_key, label in items}
     active_label = next(
-        (label for page_key, label in items if page_key == current), "Home"
+        (label for page_key, label in items
+         if page_key == PAGE_SECTION.get(current, current)), None
     )
 
     # Product and account context are intentionally separated from the
@@ -77,27 +92,20 @@ def render_nav():
             st.session_state["main_navigation"] = active_label
             st.session_state["_nav_synced_page"] = current
 
-        selected = st.pills(
+        st.pills(
             "Primary navigation",
             list(labels_to_pages),
             selection_mode="single",
             key="main_navigation",
             label_visibility="collapsed",
+            on_change=_navigate,
+            args=(labels_to_pages,),
         )
-        target = labels_to_pages.get(selected)
-        if target and target != current:
-            st.session_state.current_page = target
-            st.session_state["_nav_synced_page"] = target
-            st.rerun()
 
     with signout_col:
-        if user and st.button("Sign out", key="nav_signout",
-                              width="stretch"):
-            auth.logout()
-            st.session_state.current_page = "home"
-            st.session_state.pop("main_navigation", None)
-            st.session_state.pop("_nav_synced_page", None)
-            st.rerun()
+        if user:
+            st.button("Sign out", key="nav_signout", width="stretch",
+                      on_click=auth.logout)
 
 
 def render_statusbar():

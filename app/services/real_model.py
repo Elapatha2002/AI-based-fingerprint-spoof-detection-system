@@ -221,8 +221,6 @@ def predict(filename: str, image: Image.Image | None = None) -> dict:
 
 def explain(filename: str, image: Image.Image | None = None) -> dict:
     """Run all three XAI methods. Same return shape as mock_model.explain()."""
-    from src.xai import gradcam, shap_explainer, lime_explainer
-
     svc = get_service_info()
     model = svc["model"]
     device = svc["device"]
@@ -236,12 +234,14 @@ def explain(filename: str, image: Image.Image | None = None) -> dict:
     panels: dict = {}
 
     try:
+        from src.xai import gradcam
         r = gradcam.explain(model, image, model_name, device)
         panels["gradcam"] = _panel_from_result(r, faith=0.78, iou=0.71)
     except Exception as e:
         panels["gradcam"] = _fallback_panel("Grad-CAM++", str(e))
 
     try:
+        from src.xai import shap_explainer
         r = shap_explainer.explain(model, image, model_name, device,
                                    background_n=8)
         panels["shap"] = _panel_from_result(r, faith=0.81, iou=0.65)
@@ -249,6 +249,7 @@ def explain(filename: str, image: Image.Image | None = None) -> dict:
         panels["shap"] = _fallback_panel("SHAP", str(e))
 
     try:
+        from src.xai import lime_explainer
         r = lime_explainer.explain(model, image, model_name, device,
                                     num_samples=300)
         panels["lime"] = _panel_from_result(r, faith=0.69, iou=0.58)
@@ -335,6 +336,8 @@ def _fallback_panel(method_name: str, err: str) -> dict:
                 bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)
     return {
+        "status": "error",
+        "error": err,
         "image": buf.getvalue(),
         "faithfulness": 0.0,
         "localization_iou": 0.0,

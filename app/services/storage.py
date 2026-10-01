@@ -42,6 +42,7 @@ from dotenv import load_dotenv
 
 # Load .env from project root
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / '.env.supabase')
 load_dotenv(PROJECT_ROOT / ".env")
 
 
@@ -57,6 +58,16 @@ class S3Config:
 
     @classmethod
     def from_env(cls) -> "S3Config":
+        if os.environ.get('FSDXAI_STORAGE_BACKEND', '').lower() == 'supabase':
+            endpoint = os.environ.get('SUPABASE_S3_ENDPOINT', '').strip()
+            if not endpoint.startswith('https://'):
+                raise ValueError('SUPABASE_S3_ENDPOINT must be an HTTPS endpoint copied from Supabase.')
+            return cls(
+                access_key=os.environ.get('SUPABASE_S3_ACCESS_KEY_ID', ''),
+                secret_key=os.environ.get('SUPABASE_S3_SECRET_ACCESS_KEY', ''),
+                region=os.environ.get('SUPABASE_S3_REGION', ''),
+                bucket=os.environ.get('SUPABASE_STORAGE_BUCKET', 'fingerprint-evidence'),
+                endpoint_url=endpoint, addressing_style='path', server_side_encryption='none')
         return cls(
             access_key=os.environ.get("AWS_ACCESS_KEY_ID", ""),
             secret_key=os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
@@ -109,7 +120,10 @@ class StorageService:
                 # addressing. Keep this configurable for AWS and other providers.
                 if BotocoreConfig is not None:
                     client_args["config"] = BotocoreConfig(
-                        s3={"addressing_style": self.config.addressing_style}
+                        s3={"addressing_style": self.config.addressing_style},
+                        signature_version='s3v4',
+                        request_checksum_calculation='when_required',
+                        response_checksum_validation='when_required',
                     )
             self._client = boto3.client(**client_args)
         return self._client
@@ -266,7 +280,18 @@ def offline_mode_enabled() -> bool:
 def get_storage() -> StorageService | LocalStorageService:
     global _service
     if _service is None:
+        backend = os.environ.get('FSDXAI_STORAGE_BACKEND', 'auto').lower()
+        if backend not in ('auto', 'local', 'supabase', 's3'):
+            raise ValueError('Unknown FSDXAI_STORAGE_BACKEND.')
+        if backend == 'local':
+            _service = LocalStorageService()
+            return _service
         config = S3Config.from_env()
+        if backend in ('supabase', 's3'):
+            if not config.is_configured():
+                raise RuntimeError('Selected cloud storage is not configured. No local fallback was used.')
+            _service = StorageService(config)
+            return _service
         # If configuration is absent or recovery mode is explicit, do not
         # attempt a cloud connection: use the local disk backend instead.
         _service = (LocalStorageService() if offline_mode_enabled() or
