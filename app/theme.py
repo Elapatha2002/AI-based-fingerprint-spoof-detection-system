@@ -554,6 +554,30 @@ div[data-testid="stMetricValue"] {
 }
 
 /* Buttons */
+.st-key-result_actions .stButton button {
+  width: 100%;
+  min-height: 52px !important;
+  height: 52px !important;
+  padding: 0 16px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.st-key-result_actions .stButton button p {
+  white-space: nowrap;
+  margin: 0;
+  line-height: 1.3;
+}
+@media (max-width: 760px) {
+  .st-key-result_actions [data-testid="stHorizontalBlock"] {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+  .st-key-result_actions [data-testid="stColumn"] {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+}
 .stButton > button {
   background: var(--bg-elevated);
   color: var(--text-primary);

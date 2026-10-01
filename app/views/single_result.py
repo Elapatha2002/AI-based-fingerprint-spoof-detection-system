@@ -1,5 +1,7 @@
 """Screen 5 — Single Result (also reused by drilldown)."""
 import streamlit as st
+import hashlib
+import json
 from io import BytesIO
 from PIL import Image
 
@@ -182,8 +184,19 @@ def render(from_drilldown: bool = False, drilldown_meta: dict | None = None):
 
     divider()
 
-    # Action row
-    a1, a2, a3, _ = st.columns([1, 1, 1, 3])
+    _render_result_actions(filename, image_bytes, meta, result, xai_panels)
+
+
+def _render_result_actions(filename, image_bytes, meta, result, xai_panels):
+    # Identify this exact result, not just its filename. This guards repeat
+    # clicks in the same session without merging different model/case results.
+    save_key = hashlib.sha256(json.dumps(
+        [filename, hashlib.sha256(image_bytes or b'').hexdigest(), meta, result],
+        sort_keys=True, default=str).encode()).hexdigest()
+    saved = st.session_state.setdefault('_saved_single_records', {})
+    analysis_id = saved.get(save_key)
+    with st.container(key='result_actions'):
+        a1, a2, a3 = st.columns(3, gap='small')
     with a1:
         if st.button("Generate report", type="primary",
                      width="stretch", key="sr_report",
@@ -214,39 +227,36 @@ def render(from_drilldown: bool = False, drilldown_meta: dict | None = None):
             st.rerun()
 
     with a3:
-        if st.button("Save case record", width="stretch",
-                     key="sr_save"):
-            from state import add_to_history
-            add_to_history({
-                "type": "single",
-                "case_id": meta.get("case_id", "—"),
-                "count": 1,
-                "live_count": 1 if result["label"] == "live" else 0,
-                "spoof_count": 1 if result["label"] == "spoof" else 0,
-                "status": "Done",
-                "result": result,
-                "meta": meta,
-                "filename": filename,
-            })
-
-            # Persist to SQLite + configured object storage (best effort).
-            # Best-effort — a cloud outage must not break the demo.
+        if st.button('Saved' if analysis_id else 'Save case record', width="stretch",
+                     key="sr_save", disabled=bool(analysis_id)) and not analysis_id:
             from app.services import persistence
-            analysis_id = persistence.save_single_analysis(
-                filename=filename,
-                image_bytes=image_bytes or b"",
-                meta=meta,
-                result=result,
-                xai_panels=xai_panels,
-            )
+            with st.spinner('Saving case record...'):
+                analysis_id = persistence.save_single_analysis(
+                    filename=filename,
+                    image_bytes=image_bytes or b"",
+                    meta=meta,
+                    result=result,
+                    xai_panels=xai_panels,
+                )
             if analysis_id:
-                st.toast(f"Saved to the case record ({analysis_id}).", icon="✓")
+                # Record completion before displaying a transient notification.
+                saved[save_key] = analysis_id
+                from state import add_to_history
+                add_to_history({
+                    'type': 'single', 'case_id': meta.get('case_id', '—'),
+                    'count': 1, 'live_count': int(result['label'] == 'live'),
+                    'spoof_count': int(result['label'] == 'spoof'),
+                    'status': 'Done', 'result': result, 'meta': meta,
+                    'filename': filename, 'analysis_id': analysis_id,
+                })
                 log_action(
-                    action="Persisted analysis to storage + SQLite",
+                    action="Saved case record",
                     case_id=meta.get("case_id", "—"),
                     details=f"analysis_id={analysis_id}",
                 )
+                st.toast('Case record saved.', icon='✅')
             else:
-                st.toast("Saved to session history only "
-                         "(cloud persistence failed — check .env).",
-                         icon="⚠")
+                st.error('Case record was not saved. Check the database and storage connection, '
+                         'then try again. Keep this page open to retain the current image.')
+    if analysis_id:
+        st.success(f'Case record saved. Reference: {analysis_id}')
