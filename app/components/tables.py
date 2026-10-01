@@ -70,6 +70,7 @@ def history_table(history: list[dict]) -> pd.DataFrame:
             "Case ID": h.get("case_id", "—"),
             "Type": h.get("type", "—").title(),
             "Items": h.get("count", 1),
+            "Saved records": h.get("saved_count", h.get("count", 1)),
             "Live": h.get("live_count", "—"),
             "Spoof": h.get("spoof_count", "—"),
             "Status": h.get("status", "Done"),

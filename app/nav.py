@@ -20,7 +20,7 @@ ADMIN_NAV = [
 # Detail pages belong to a navigation section, but are not navigation targets.
 PAGE_SECTION = dict(single_result='analyze', processing='analyze',
                     batch_dashboard='analyze', drilldown='analyze',
-                    report_preview='analyze')
+                    report_preview='analyze', saved_analysis='history')
 
 
 def _navigate(labels_to_pages):

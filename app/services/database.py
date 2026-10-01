@@ -244,14 +244,17 @@ def get_analysis(analysis_id: str) -> Optional[dict]:
 
 
 def list_analyses(case_id: Optional[str] = None,
-                  limit: int = 200) -> list[dict]:
+                  limit: Optional[int] = 200) -> list[dict]:
     q = "SELECT * FROM analyses"
     params: tuple = ()
     if case_id:
         q += " WHERE case_id = ?"
         params = (case_id,)
-    q += " ORDER BY created_at DESC LIMIT ?"
-    params = params + (limit,)
+    # A stable tie-breaker is necessary for legacy second-resolution timestamps.
+    q += " ORDER BY created_at DESC, analysis_id DESC"
+    if limit is not None:
+        q += " LIMIT ?"
+        params = params + (limit,)
     with connect() as conn:
         return [dict(r) for r in conn.execute(q, params).fetchall()]
 

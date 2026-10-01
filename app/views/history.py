@@ -35,7 +35,7 @@ def render():
     with f2:
         type_filter = st.selectbox(
             "Analysis type",
-            ["All", "Single", "Batch"],
+            ["All", "Single", "Multiple images"],
             key="hist_type",
         )
     with f3:
@@ -61,7 +61,9 @@ def render():
         )
         return
 
-    st.caption(f"{len(filtered)} saved {'analysis' if len(filtered) == 1 else 'analyses'}")
+    st.caption(f"{len(filtered)} {'case' if len(filtered) == 1 else 'cases'} · "
+               "Items = distinct images. Live/Spoof = latest saved result per image. "
+               "Saved records includes repeat saves and earlier model results.")
     history_table(filtered)
 
     if filtered:
@@ -83,28 +85,26 @@ def render():
                                       width="stretch", key="hist_open")
         if open_selected:
             entry = filtered[idx]
-            if entry["type"] == "batch":
-                # For persisted batches, refetch every image from storage.
-                # For in-session batches, use the cached files list.
-                if entry.get("_source") == "db":
-                    files = _fetch_batch_from_s3(entry["case_id"])
-                    st.session_state.current_batch = {
-                        "files": files,
-                        "results": [],
-                        "meta": entry.get("meta", {}),
-                    }
-                else:
-                    st.session_state.current_batch = {
-                        "files": entry.get("files", []),
-                        "results": entry.get("results", []),
-                        "meta": entry.get("meta", {}),
-                    }
+            if entry.get("_source") == "db" or entry.get("analysis_id"):
+                # Open the persisted snapshot by ID, never re-run the current
+                # model or send an empty results list to the batch dashboard.
+                st.session_state.saved_case_id = entry["case_id"]
+                st.session_state.saved_analysis_id = entry.get("analysis_id")
+                st.session_state.pop(f"saved_record_{entry['case_id']}", None)
+                st.session_state.current_page = "saved_analysis"
+            elif entry["type"] == "multiple images":
+                st.session_state.current_batch = {
+                    "files": entry.get("files", []),
+                    "results": entry.get("results", []),
+                    "meta": entry.get("meta", {}),
+                }
                 st.session_state.current_page = "batch_dashboard"
             else:
-                # For persisted single, download the original image from storage.
-                image_bytes = b""
-                if entry.get("_source") == "db":
-                    image_bytes = _fetch_single_from_s3(entry["case_id"])
+                image_bytes = entry.get("image_bytes", b"")
+                if not image_bytes:
+                    st.error("The original image is not available in this session. "
+                             "Upload it again from Analyze.")
+                    return
                 st.session_state.current_single = {
                     "filename": entry.get("filename", "-"),
                     "image_bytes": image_bytes,
@@ -114,36 +114,6 @@ def render():
             st.rerun()
 
 
-def _fetch_single_from_s3(case_id: str) -> bytes:
-    """Download the most recent analysis image from the active backend."""
-    try:
-        from app.services import database, storage
-        analyses = database.list_analyses(case_id=case_id, limit=1)
-        if not analyses:
-            return b""
-        return storage.get_storage().download_bytes(analyses[0]["image_s3_key"])
-    except Exception:
-        return b""
-
-
-def _fetch_batch_from_s3(case_id: str) -> list[tuple[str, bytes]]:
-    """Download every analysis image as ``(filename, bytes)`` tuples."""
-    try:
-        from app.services import database, storage
-        svc = storage.get_storage()
-        analyses = database.list_analyses(case_id=case_id, limit=500)
-        files: list[tuple[str, bytes]] = []
-        for a in analyses:
-            try:
-                data = svc.download_bytes(a["image_s3_key"])
-                files.append((a["image_filename"], data))
-            except Exception:
-                continue
-        return files
-    except Exception:
-        return []
-
-
 def _load_history_from_db_or_session() -> list[dict]:
     """DB-first with graceful fallback.
 
@@ -151,7 +121,10 @@ def _load_history_from_db_or_session() -> list[dict]:
     remain visible during a session, while restarts still show persisted
     history from previous sessions.
     """
-    session_history = list(st.session_state.get("history", []))
+    session_history = [dict(row) for row in st.session_state.get("history", [])]
+    for row in session_history:
+        if row.get("type") == "batch":
+            row["type"] = "multiple images"
     try:
         from app.services import persistence
         db_history = persistence.list_history_from_db()

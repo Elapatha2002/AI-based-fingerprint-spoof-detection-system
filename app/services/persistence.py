@@ -180,7 +180,9 @@ def save_report_to_cloud(*, case_id: str, pdf_bytes: bytes,
 def list_history_from_db() -> list[dict]:
     """Return history rows in the format history_table expects.
 
-    Groups analyses by case_id. Each case becomes one history entry.
+    Groups analyses by case_id. Counts distinct evidence images, not saves.
+    Verdict counts use the latest stored analysis for each image. All saved
+    analyses (including repeats and different models) remain available to open.
     Compatible with the existing tables.history_table renderer.
     """
     try:
@@ -192,21 +194,25 @@ def list_history_from_db() -> list[dict]:
     entries = []
     for case in cases:
         try:
-            analyses = database.list_analyses(case_id=case["case_id"])
+            analyses = database.list_analyses(case_id=case["case_id"], limit=None)
         except Exception:
             analyses = []
         if not analyses:
             continue
 
-        live_count = sum(1 for a in analyses if a["verdict"] == "live")
-        spoof_count = sum(1 for a in analyses if a["verdict"] == "spoof")
-        entry_type = "single" if len(analyses) == 1 else "batch"
+        images = latest_analyses_by_image(analyses)
+        live_count = sum(1 for a in images if a["verdict"] == "live")
+        spoof_count = sum(1 for a in images if a["verdict"] == "spoof")
+        # Legacy records do not store a batch/run ID. Do not infer a batch
+        # upload merely because several analyses share a case ID.
+        entry_type = "single" if len(images) == 1 else "multiple images"
         latest = analyses[0]                              # DESC ordered
 
         entries.append({
             "type": entry_type,
             "case_id": case["case_id"],
-            "count": len(analyses),
+            "count": len(images),
+            "saved_count": len(analyses),
             "live_count": live_count,
             "spoof_count": spoof_count,
             "status": case.get("status", "open").title(),
@@ -221,6 +227,25 @@ def list_history_from_db() -> list[dict]:
             "_source": "db",                              # marker for renderers
         })
     return entries
+
+
+def latest_analyses_by_image(analyses: list[dict]) -> list[dict]:
+    """One latest row per evidence hash; input is ordered newest first.
+
+    For legacy records without hashes use their storage key, never filename:
+    different fingerprints can have the same filename. Without either identity
+    retain the individual record rather than guessing that it is a duplicate.
+    """
+    images = {}
+    for row in analyses:
+        if row.get("image_hash"):
+            identity = ("hash", row["image_hash"])
+        elif row.get("image_s3_key"):
+            identity = ("storage", row["image_s3_key"])
+        else:
+            identity = ("analysis", row["analysis_id"])
+        images.setdefault(identity, row)
+    return list(images.values())
 
 
 # ── Helpers ──────────────────────────────────────────────────────────

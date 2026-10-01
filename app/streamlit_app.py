@@ -33,7 +33,7 @@ from nav import render_nav, render_statusbar  # noqa: E402
 from views import (  # noqa: E402
     home, analyze, processing, batch_dashboard,
     single_result, drilldown, report_preview,
-    history, about, compare_xai, login, settings,
+    history, saved_analysis, about, compare_xai, login, settings,
 )
 
 # Auth service — must import after sys.path is set up
@@ -49,6 +49,7 @@ PAGES = {
     "drilldown": drilldown.render,
     "report_preview": report_preview.render,
     "history": history.render,
+    "saved_analysis": saved_analysis.render,
     "about": about.render,
     "compare_xai": compare_xai.render,
     "settings": settings.render,
