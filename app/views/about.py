@@ -109,7 +109,7 @@ def render():
             "module on a ResNet50 backbone) produces a live-vs-spoof "
             "probability.</li>"
             "<li>Three XAI methods generate visual explanations: "
-            "Grad-CAM++, SHAP DeepExplainer, and LIME with quickshift "
+            "Grad-CAM++, SHAP GradientExplainer, and LIME with quickshift "
             "superpixels.</li>"
             "<li>Every action is dual-written to a session audit log and to "
             "a persistent SQLite database, giving the workflow a chain of "

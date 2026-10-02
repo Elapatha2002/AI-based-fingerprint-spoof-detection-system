@@ -52,7 +52,7 @@ def disable_inplace_ops(model: nn.Module) -> nn.Module:
     """
     Walk the module tree and turn off any inplace flag.
 
-    Why: SHAP DeepExplainer and Grad-CAM++ both register backward hooks.
+    Why: gradient-based explainers and Grad-CAM++ can register backward hooks.
     PyTorch refuses to differentiate through `ReLU(inplace=True)` (and
     similar `Hardswish`, `ReLU6`, `SiLU` variants with `inplace=True`)
     when a custom backward hook is attached — it raises the

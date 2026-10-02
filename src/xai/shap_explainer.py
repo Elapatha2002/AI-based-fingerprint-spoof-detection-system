@@ -1,25 +1,25 @@
 """
-SHAP DeepExplainer wrapper.
+Memory-bounded SHAP GradientExplainer wrapper.
 
 Reference: Lundberg & Lee (2017), "A Unified Approach to Interpreting
 Model Predictions."
 
-DeepExplainer computes approximate Shapley values via gradient
-backpropagation against a *background distribution* — a small set of
+GradientExplainer computes expected-gradient approximations of Shapley values
+against a *background distribution* — a small set of
 "reference" images that represent baseline activations. The resulting
 attribution map shows which input pixels push the prediction toward
 "spoof" (positive) vs. toward "live" (negative).
 
 Notes
 -----
-- DeepExplainer expects a model that returns a 2D tensor (B, C). For our
+- GradientExplainer expects a model that returns a 2D tensor (B, C). For our
   single-logit binary head, we wrap the model so it outputs (B, 2) using
   [-logit, +logit] — this gives SHAP a "live channel" and "spoof channel"
   to attribute against.
 - Background = a fixed, versioned set of 8 stratified TRAIN images stored
   privately. Reusing one verified distribution makes explanations repeatable
   and keeps hosted CPU/memory cost bounded.
-- DeepExplainer is the slowest of the three XAIs on CPU (~3–10 s/image).
+- A batch size of one and a fixed sampling budget bound hosted memory use.
 """
 from __future__ import annotations
 
@@ -80,9 +80,10 @@ def _build_background(n: int = 8) -> torch.Tensor:
 def explain(model: nn.Module, image: Image.Image, model_name: str,
             device: torch.device | None = None,
             background_n: int = 8,
+            nsamples: int = 32,
             target_class: int = 1) -> XAIResult:
     """
-    Run SHAP DeepExplainer. Returns spatial attribution heatmap.
+    Run SHAP GradientExplainer. Returns a spatial attribution heatmap.
 
     Args:
         model:         trained nn.Module (binary head)
@@ -91,6 +92,8 @@ def explain(model: nn.Module, image: Image.Image, model_name: str,
         device:        optional torch.device
         background_n:  size of the fixed background distribution. Version v1
                        contains four live and four spoof training images.
+        nsamples:      expected-gradient samples. The hosted default of 32 is
+                       deterministic and processed in one-sample batches.
         target_class:  0 = explain 'live', 1 = explain 'spoof' (default).
     """
     if device is None:
@@ -102,21 +105,18 @@ def explain(model: nn.Module, image: Image.Image, model_name: str,
     background = _build_background(background_n).to(device)
     input_tensor = preprocess(image).to(device)
 
-    used_method = "DeepExplainer"
     try:
         with Timer() as t:
-            try:
-                explainer = shap.DeepExplainer(wrapped, background)
-                shap_values = explainer.shap_values(
-                    input_tensor, check_additivity=False
-                )
-            except Exception as deep_err:
-                # Fall back to gradient-based explainer — simpler, no custom hooks.
-                # Slightly less accurate but works on any architecture.
-                clear_all_hooks(wrapped)
-                used_method = f"GradientExplainer (fallback: {type(deep_err).__name__})"
-                explainer = shap.GradientExplainer(wrapped, background)
-                shap_values = explainer.shap_values(input_tensor)
+            # DeepExplainer creates backward hooks and a large graph for the
+            # complete CNN.  On small hosted workers that can terminate the
+            # process before an exception is catchable.  GradientExplainer is
+            # still a SHAP algorithm; batch_size=1 bounds its working set.
+            explainer = shap.GradientExplainer(
+                wrapped, background, batch_size=1, local_smoothing=0,
+            )
+            shap_values = explainer.shap_values(
+                input_tensor, nsamples=nsamples, rseed=42,
+            )
     finally:
         # No matter what happened, leave the model clean for the next XAI method
         clear_all_hooks(wrapped)
@@ -150,6 +150,7 @@ def explain(model: nn.Module, image: Image.Image, model_name: str,
         summary=summary,
         extra={"target_class": target_class,
                "background_n": background_n,
+               "nsamples": nsamples,
                "max_abs": vmax,
-               "explainer": used_method},
+               "explainer": "GradientExplainer"},
     )

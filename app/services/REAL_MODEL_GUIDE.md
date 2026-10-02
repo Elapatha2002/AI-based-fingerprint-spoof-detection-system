@@ -131,7 +131,8 @@ python -m streamlit run app\streamlit_app.py
 
 ### First XAI call hangs at 0%
 
-Normal — SHAP DeepExplainer takes ~10 s on MobileNetV3 / 30 s on ResNet50
+Normal — SHAP GradientExplainer takes several seconds on MobileNetV3 and
+longer on ResNet50
 without any progress reporting. Be patient on the first explain() call.
 LIME shows a progress bar; SHAP doesn't.
 

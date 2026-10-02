@@ -10,7 +10,7 @@ relevant features?"*
 |---|---|
 | `base.py` | Shared helpers: target-layer resolver, image preprocessing, overlay rendering, timing |
 | `gradcam.py` | Grad-CAM++ wrapper via `pytorch-grad-cam` |
-| `shap_explainer.py` | SHAP DeepExplainer wrapper (binary head → 2-class wrapper inside) |
+| `shap_explainer.py` | Memory-bounded SHAP GradientExplainer wrapper (binary head → 2-class wrapper inside) |
 | `lime_explainer.py` | LIME image wrapper |
 | `gallery.py` | CLI that produces thesis Figure 4 + survey stimulus images |
 
@@ -77,7 +77,7 @@ Chapter 4 XAI section.
 | Method | Time | Notes |
 |---|---|---|
 | Grad-CAM++ | ~1–3 s | Fast — uses a single backward pass |
-| SHAP DeepExplainer | ~3–10 s | Scales with `--shap-bg` |
+| SHAP GradientExplainer | ~3–10 s | Scales with background and sample counts |
 | LIME | ~10–25 s | Scales with `--lime-samples` |
 
 10-image gallery on CPU: budget 4–8 minutes total.
@@ -90,7 +90,8 @@ channel by its average gradient. Fast and sensitive to where the model
 attends, but the heatmap is coarse (limited to the conv layer's spatial
 resolution, typically 7×7 upsampled to 224×224).
 
-**SHAP DeepExplainer** is an **attribution** method based on Shapley
+**SHAP GradientExplainer** is an **attribution** method based on expected
+gradients and approximate Shapley
 values from cooperative game theory. It estimates how each input
 feature (pixel / channel) contributes — *positively or negatively* — to
 the prediction, against a background distribution of "reference" images.
