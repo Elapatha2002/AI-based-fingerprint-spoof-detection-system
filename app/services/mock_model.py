@@ -180,6 +180,39 @@ def explain(filename: str, image: Image.Image | None = None) -> dict:
     return panels
 
 
+def explain_one(method: str, filename: str,
+                image: Image.Image | None = None) -> dict:
+    """Generate one explanation panel without running the other methods."""
+    method = method.lower().strip()
+    if method not in {"gradcam", "shap", "lime"}:
+        raise ValueError(f"Unknown XAI method: {method!r}")
+    if _real_mode():
+        from services import real_model
+        return real_model.explain_one(method, filename, image)
+
+    seed = _seed_from_name(filename)
+    rng = np.random.default_rng(seed)
+    if image is None:
+        image = _generate_placeholder_fingerprint(seed)
+
+    configs = {
+        "gradcam": (0.70, 0.85, 0.65, 0.80, 120,
+                    "Grad-CAM++ localized abnormal ridge continuity in the central region."),
+        "shap": (0.72, 0.86, 0.55, 0.75, 3210,
+                 "SHAP attributed positive evidence to ridge texture, negative to background regions."),
+        "lime": (0.55, 0.75, 0.45, 0.65, 5180,
+                 "LIME flagged 5 superpixels in the upper valley as decision-driving."),
+    }
+    faith_low, faith_high, iou_low, iou_high, compute_ms, summary = configs[method]
+    return {
+        "image": _heatmap_image(image, seed, method),
+        "faithfulness": round(float(rng.uniform(faith_low, faith_high)), 3),
+        "localization_iou": round(float(rng.uniform(iou_low, iou_high)), 3),
+        "compute_ms": compute_ms,
+        "summary": summary,
+    }
+
+
 def _generate_placeholder_fingerprint(seed: int) -> Image.Image:
     """Generate a procedural fingerprint-like grayscale image."""
     rng = np.random.default_rng(seed)

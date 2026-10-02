@@ -82,9 +82,29 @@ def render():
     if img is None:
         img = mock_model.placeholder_image(filename)
 
-    with st.spinner("Computing predictions and XAI..."):
+    with st.spinner("Loading prediction..."):
         result = _cached_predict(filename, image_bytes)
-        xai = _cached_explain(filename, image_bytes)
+
+    # The comparison page must never trigger all three explainers in a single
+    # hosted request.  The result page generates them independently and passes
+    # the completed panels here.
+    xai = target.get("xai", {})
+    required = {"gradcam", "shap", "lime"}
+    if not required.issubset(xai):
+        st.info(
+            "Generate Grad-CAM++, SHAP and LIME on the Result page first. "
+            "They will then be available here for comparison."
+        )
+        if st.button("Open Result", type="primary", key="cmp_generate_first"):
+            st.session_state.current_single = {
+                "filename": filename,
+                "image_bytes": image_bytes,
+                "meta": (batch["meta"] if batch else
+                         single.get("meta", {}) if single else {}),
+            }
+            st.session_state.current_page = "single_result"
+            st.rerun()
+        return
 
     if any(p.get('status') == 'error' for p in xai.values()):
         from components.xai_views import xai_tabs

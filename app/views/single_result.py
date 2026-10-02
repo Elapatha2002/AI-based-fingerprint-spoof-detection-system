@@ -31,6 +31,31 @@ def _cached_explain(filename: str, image_bytes: bytes) -> dict:
     return mock_model.explain(filename, img)
 
 
+@st.cache_data(show_spinner=False)
+def _cached_explain_method(method: str, filename: str,
+                           image_bytes: bytes) -> dict:
+    """Compute one explanation so hosted requests have bounded peak memory."""
+    img = Image.open(BytesIO(image_bytes)) if image_bytes else None
+    return mock_model.explain_one(method, filename, img)
+
+
+def _explanation_key(filename: str, image_bytes: bytes, result: dict) -> str:
+    identity = [
+        filename,
+        hashlib.sha256(image_bytes or b"").hexdigest(),
+        result.get("model", {}),
+    ]
+    return hashlib.sha256(json.dumps(
+        identity, sort_keys=True, default=str,
+    ).encode()).hexdigest()
+
+
+def _explanations_complete(panels: dict) -> bool:
+    required = {"gradcam", "shap", "lime"}
+    return (required.issubset(panels) and
+            all(panels[name].get("status") != "error" for name in required))
+
+
 def render(from_drilldown: bool = False, drilldown_meta: dict | None = None):
     """If from_drilldown, drilldown_meta carries the file context."""
     if from_drilldown and drilldown_meta:
@@ -165,8 +190,53 @@ def render(from_drilldown: bool = False, drilldown_meta: dict | None = None):
     divider()
 
     section_header("Explanation")
-    with st.spinner("Computing XAI overlays..."):
-        xai_panels = _cached_explain(filename, image_bytes or b"")
+    st.caption(
+        "Generate explanations one at a time. This keeps the hosted session "
+        "responsive while each method processes the fingerprint."
+    )
+    explanation_key = _explanation_key(filename, image_bytes or b"", result)
+    explanation_store = st.session_state.setdefault("_single_xai_panels", {})
+    xai_panels = explanation_store.setdefault(explanation_key, {})
+
+    method_specs = (
+        ("gradcam", "Grad-CAM++"),
+        ("shap", "SHAP"),
+        ("lime", "LIME"),
+    )
+    method_columns = st.columns(3, gap="small")
+    requested_method = None
+    for column, (method, label) in zip(method_columns, method_specs):
+        existing = xai_panels.get(method)
+        succeeded = bool(existing and existing.get("status") != "error")
+        button_label = f"{label} ready" if succeeded else (
+            f"Retry {label}" if existing else f"Generate {label}"
+        )
+        with column:
+            if st.button(
+                button_label,
+                key=f"sr_xai_{method}",
+                width="stretch",
+                disabled=succeeded,
+            ):
+                requested_method = method
+
+    if requested_method:
+        pretty = dict(method_specs)[requested_method]
+        try:
+            with st.spinner(f"Generating {pretty} explanation..."):
+                xai_panels[requested_method] = _cached_explain_method(
+                    requested_method, filename, image_bytes or b"",
+                )
+            explanation_store[explanation_key] = xai_panels
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).exception(
+                "%s explanation failed", pretty,
+            )
+            st.error(
+                f"{pretty} could not be generated. The application log "
+                f"contains the technical error: {type(exc).__name__}."
+            )
 
     xai_tabs(xai_panels, original_image=img)
 
@@ -195,12 +265,13 @@ def _render_result_actions(filename, image_bytes, meta, result, xai_panels):
         sort_keys=True, default=str).encode()).hexdigest()
     saved = st.session_state.setdefault('_saved_single_records', {})
     analysis_id = saved.get(save_key)
+    explanations_complete = _explanations_complete(xai_panels)
     with st.container(key='result_actions'):
         a1, a2, a3 = st.columns(3, gap='small')
     with a1:
         if st.button("Generate report", type="primary",
                      width="stretch", key="sr_report",
-                     disabled=any(p.get('status') == 'error' for p in xai_panels.values()),
+                     disabled=not explanations_complete,
                      help='All explanation methods must complete before generating an XAI report.'):
             log_action(
                 action=f"Initiated report generation for {filename}",
@@ -218,10 +289,12 @@ def _render_result_actions(filename, image_bytes, meta, result, xai_panels):
 
     with a2:
         if st.button("Compare explanations", width="stretch",
-                     key="sr_compare"):
+                     key="sr_compare", disabled=not explanations_complete,
+                     help='Generate all three explanations before comparing them.'):
             st.session_state["compare_target"] = {
                 "filename": filename,
                 "image_bytes": image_bytes,
+                "xai": xai_panels,
             }
             st.session_state.current_page = "compare_xai"
             st.rerun()

@@ -59,10 +59,16 @@ def _all_panels_grid(xai_panels: dict, original_image):
         st.info("No XAI outputs available.")
         return
     cols = st.columns(4)
-    cols[0].image(original_image, caption="Original", width="stretch")
-    cols[1].image(xai_panels["gradcam"]["image"], caption="Grad-CAM++",
-                  width="stretch")
-    cols[2].image(xai_panels["shap"]["image"], caption="SHAP",
-                  width="stretch")
-    cols[3].image(xai_panels["lime"]["image"], caption="LIME",
-                  width="stretch")
+    if original_image is not None:
+        cols[0].image(original_image, caption="Original", width="stretch")
+    for column, key, label in zip(
+        cols[1:], ("gradcam", "shap", "lime"),
+        ("Grad-CAM++", "SHAP", "LIME"),
+    ):
+        panel = xai_panels.get(key)
+        if panel and panel.get("status") != "error" and panel.get("image"):
+            column.image(panel["image"], caption=label, width="stretch")
+        elif panel and panel.get("status") == "error":
+            column.error(f"{label} unavailable")
+        else:
+            column.info(f"Generate {label}")

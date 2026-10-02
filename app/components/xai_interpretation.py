@@ -46,7 +46,10 @@ def render_xai_interpretation(xai_panels: dict,
                               verdict_label: str,
                               p_spoof: float) -> None:
     """Render the guided interpretation panel."""
-    if any(p.get('status') == 'error' for p in xai_panels.values()):
+    required = {"gradcam", "shap", "lime"}
+    if (not required.issubset(xai_panels) or
+            any(xai_panels[m].get('status') == 'error' for m in required
+                if m in xai_panels)):
         st.warning('Explanation generation is incomplete. Cross-method agreement '
                    'cannot be interpreted until all explanation methods are available.')
         return

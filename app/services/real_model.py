@@ -21,6 +21,7 @@ and faithfulness metrics show it's a strong choice (see thesis §4.5).
 from __future__ import annotations
 
 import io
+import gc
 import re
 import sys
 import time
@@ -170,8 +171,18 @@ def predict(filename: str, image: Image.Image | None = None) -> dict:
     }
 
 
-def explain(filename: str, image: Image.Image | None = None) -> dict:
-    """Run all three XAI methods. Same return shape as mock_model.explain()."""
+def explain_one(method: str, filename: str,
+                image: Image.Image | None = None) -> dict:
+    """Run one XAI method and return its panel.
+
+    Hosted deployments call this method directly so SHAP, LIME and
+    Grad-CAM++ never occupy the same request.  Apart from improving the user
+    feedback, this bounds peak memory on small Streamlit Cloud containers.
+    """
+    method = method.lower().strip()
+    if method not in {"gradcam", "shap", "lime"}:
+        raise ValueError(f"Unknown XAI method: {method!r}")
+
     svc = get_service_info()
     model = svc["model"]
     device = svc["device"]
@@ -182,30 +193,44 @@ def explain(filename: str, image: Image.Image | None = None) -> dict:
     if image.mode != "RGB":
         image = image.convert("RGB")
 
-    panels: dict = {}
-
     try:
-        from src.xai import gradcam
-        r = gradcam.explain(model, image, model_name, device)
-        panels["gradcam"] = _panel_from_result(r, faith=0.78, iou=0.71)
-    except Exception as e:
-        panels["gradcam"] = _fallback_panel("Grad-CAM++", str(e))
+        if method == "gradcam":
+            from src.xai import gradcam
+            result = gradcam.explain(model, image, model_name, device)
+            return _panel_from_result(result, faith=0.78, iou=0.71)
+        if method == "shap":
+            from src.xai import shap_explainer
+            result = shap_explainer.explain(
+                model, image, model_name, device, background_n=8,
+            )
+            return _panel_from_result(result, faith=0.81, iou=0.65)
 
-    try:
-        from src.xai import shap_explainer
-        r = shap_explainer.explain(model, image, model_name, device,
-                                   background_n=8)
-        panels["shap"] = _panel_from_result(r, faith=0.81, iou=0.65)
-    except Exception as e:
-        panels["shap"] = _fallback_panel("SHAP", str(e))
-
-    try:
         from src.xai import lime_explainer
-        r = lime_explainer.explain(model, image, model_name, device,
-                                    num_samples=300)
-        panels["lime"] = _panel_from_result(r, faith=0.69, iou=0.58)
-    except Exception as e:
-        panels["lime"] = _fallback_panel("LIME", str(e))
+        result = lime_explainer.explain(
+            model, image, model_name, device, num_samples=300,
+        )
+        return _panel_from_result(result, faith=0.69, iou=0.58)
+    except Exception as exc:
+        pretty = {"gradcam": "Grad-CAM++", "shap": "SHAP", "lime": "LIME"}
+        return _fallback_panel(pretty[method], str(exc))
+    finally:
+        # Explanation libraries create hooks, graphs and temporary arrays.  Do
+        # not retain them between independent Streamlit requests.
+        try:
+            from src.xai.base import clear_all_hooks
+            clear_all_hooks(model)
+        except Exception:
+            pass
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+
+def explain(filename: str, image: Image.Image | None = None) -> dict:
+    """Run all XAI methods for CLI/tests; hosted UI uses ``explain_one``."""
+    panels: dict = {}
+    for method in ("gradcam", "shap", "lime"):
+        panels[method] = explain_one(method, filename, image)
 
     return panels
 

@@ -18,7 +18,7 @@ from state import init_state
 from views.single_result import _render_result_actions
 init_state()
 _render_result_actions('fixture.png', st.session_state['image'],
-    st.session_state['meta'], st.session_state['result'], {})
+    st.session_state['meta'], st.session_state['result'], st.session_state['xai'])
 '''
 
 
@@ -41,8 +41,23 @@ class ResultActionsTests(unittest.TestCase):
         self.app.session_state['meta'] = {'case_id':'CASE-SAVE-TEST', 'examiner':'Fixture Examiner'}
         self.app.session_state['result'] = {'label':'live', 'confidence':.9,
             'model': {'name':'fixture-model'}, 'threshold_used':.5}
+        self.app.session_state['xai'] = {
+            name: {
+                'image': b'fixture-overlay', 'faithfulness': .7,
+                'localization_iou': .6, 'compute_ms': 10,
+                'summary': f'{name} fixture',
+            }
+            for name in ('gradcam', 'shap', 'lime')
+        }
         self.app.run()
         self.assertFalse(self.app.exception)
+
+    def test_report_and_compare_wait_for_all_explanations(self):
+        self.app.session_state['xai'] = {'gradcam': self.app.session_state['xai']['gradcam']}
+        self.app.run()
+        self.assertTrue(self.app.button(key='sr_report').disabled)
+        self.assertTrue(self.app.button(key='sr_compare').disabled)
+        self.assertFalse(self.app.button(key='sr_save').disabled)
 
     def test_success_saves_bytes_and_record_without_toast_crash(self):
         self.app.button(key='sr_save').click().run()
