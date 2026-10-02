@@ -63,7 +63,10 @@ def render_nav():
         st.markdown(
             """
             <div class='fsd-app-brand'>
-              <span class='fsd-brand-mark' aria-hidden='true'>F</span>
+              <span class='fsd-brand-mark'>
+                <img src='app/static/brand/fsd-xai-logo.png'
+                     alt='FSD-XAI fingerprint shield logo'>
+              </span>
               <div>
                 <div class='fsd-brand-name'>FSD-XAI</div>
                 <div class='fsd-brand-context'>Forensic spoof detection workspace</div>
@@ -104,7 +107,7 @@ def render_nav():
 
     with signout_col:
         if user:
-            st.button("Sign out", key="nav_signout", width="stretch",
+            st.button("Sign out", key="nav_signout", width="content",
                       on_click=auth.logout)
 
 
@@ -126,18 +129,18 @@ def render_statusbar():
 
     if os.environ.get("FSDXAI_REAL_MODEL") == "1":
         try:
-            from services.real_model import get_service_info
-            svc = get_service_info()
-            chips.append(f"<span class='fsd-chip fsd-chip-info'>⚙ {svc['name']}</span>")
-            chips.append(f"<span class='fsd-chip fsd-chip-muted'>commit {svc['commit']}</span>")
-            chips.append(f"<span class='fsd-chip fsd-chip-muted'>{svc['device']}</span>")
-            chips.append("<span class='fsd-chip fsd-chip-success'>● real model</span>")
-        except Exception as e:
+            # Status rendering must stay lightweight. Importing real_model here
+            # used to construct/load a neural network during ordinary tab clicks.
+            from app.services.model_config import configured_selection, checkpoint_state
+            model_name, checkpoint = configured_selection(st.session_state)
+            state, state_label = checkpoint_state(checkpoint)
+            chips.append(f"<span class='fsd-chip fsd-chip-info'>⚙ {escape(model_name)}</span>")
+            chips.append(f"<span class='fsd-chip fsd-chip-muted'>{escape(checkpoint.parent.name)}</span>")
+            state_class = "fsd-chip-success" if state == "ready" else "fsd-chip-spoof"
+            chips.append(f"<span class='fsd-chip {state_class}'>● {escape(state_label)}</span>")
+        except Exception:
             chips.append(
-                f"<span class='fsd-chip fsd-chip-spoof'>● real-model error</span>"
-            )
-            chips.append(
-                f"<span class='fsd-chip fsd-chip-muted'>{type(e).__name__}</span>"
+                "<span class='fsd-chip fsd-chip-spoof'>● model configuration error</span>"
             )
     else:
         chips.append("<span class='fsd-chip fsd-chip-info'>⚙ mobilenetv3_large</span>")

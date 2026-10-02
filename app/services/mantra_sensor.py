@@ -8,27 +8,29 @@ Two modes:
          CI environments, and as a fallback when the SDK can't reach the
          device. No hardware needed.
 
-  REAL — calls the Mantra MFS100 SDK to capture from the USB device.
-         Implementation TODO: filled in once the sensor arrives and the
-         SDK is downloaded from the Mantra developer portal.
+  REAL — calls the Mantra MFS100 SDK directly when Streamlit is local, or
+         receives a capture from the authenticated loopback bridge when the
+         application is hosted.
 
 Both modes return the same MantraCaptureResult, so downstream code
 does not need to change when we swap them.
 
 The mode is chosen by the MANTRA_SENSOR_MODE environment variable:
 
-    unset or "mock" -> MOCK
-    "real"          -> REAL
+    unset or "real" -> REAL
+    "mock"          -> MOCK (development/test only)
 
-We keep the mock as the default so the demo apps run out of the box on
-any machine even without the sensor plugged in. When rehearsing the
-final viva flow, set MANTRA_SENSOR_MODE=real in .env.
+Set MANTRA_SENSOR_MODE=mock explicitly only when a sensor demonstration
+is intentionally being simulated.
 """
 from __future__ import annotations
 
+import base64
 import io
+import json
 import os
 import random
+import subprocess
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -49,6 +51,8 @@ load_dotenv(PROJECT_ROOT / ".env")
 # distribution.
 _MOCK_LIVE_DIR = PROJECT_ROOT / "DataSet" / "LivDet Datasets" / "Normalized" / "test" / "live"
 _MOCK_SPOOF_DIR = PROJECT_ROOT / "DataSet" / "LivDet Datasets" / "Normalized" / "test" / "spoof"
+_CAPTURE_HELPER = PROJECT_ROOT / "tools" / "mantra_bridge" / "capture.ps1"
+_DEFAULT_SDK_DIR = Path(r"C:\Program Files\Mantra\MFS100\Driver\MFS100Test")
 
 
 # ── Data class ────────────────────────────────────────────────────────
@@ -74,7 +78,25 @@ class MantraCaptureResult:
 
 def current_mode() -> str:
     """Return 'real' or 'mock' — never anything else."""
-    return "real" if os.environ.get("MANTRA_SENSOR_MODE", "mock").lower() == "real" else "mock"
+    return "mock" if os.environ.get("MANTRA_SENSOR_MODE", "real").lower() == "mock" else "real"
+
+
+def capture_transport() -> str:
+    """Return ``direct`` or ``bridge`` for real capture.
+
+    Direct capture is possible only when Streamlit itself runs on the Windows
+    PC containing the SDK. A hosted server must ask the browser-side bridge.
+    ``MANTRA_SENSOR_TRANSPORT`` can override the automatic choice.
+    """
+    configured = os.environ.get("MANTRA_SENSOR_TRANSPORT", "auto").strip().lower()
+    if configured in {"direct", "bridge"}:
+        return configured
+    sdk_dir = Path(os.environ.get("MFS100_SDK_DIR", str(_DEFAULT_SDK_DIR)))
+    return "direct" if os.name == "nt" and (sdk_dir / "MANTRA.MFS100.dll").is_file() else "bridge"
+
+
+def bridge_url() -> str:
+    return os.environ.get("MANTRA_BRIDGE_URL", "http://127.0.0.1:8765").rstrip("/")
 
 
 def is_available() -> tuple[bool, str]:
@@ -83,9 +105,11 @@ def is_available() -> tuple[bool, str]:
 
     Returns (available, human_readable_status)."""
     mode = current_mode()
-    if mode == "real":
+    if mode == "real" and capture_transport() == "direct":
         ok, msg = _real_sdk_available()
         return ok, msg
+    if mode == "real":
+        return True, "Use the local MFS100 bridge in this browser"
     # Mock mode is always available if the LivDet test folder exists
     if _MOCK_LIVE_DIR.exists() or _MOCK_SPOOF_DIR.exists():
         return True, "Mock mode — sensor emulator ready"
@@ -163,51 +187,99 @@ def _mock_capture(prefer_class: Optional[str] = None) -> MantraCaptureResult:
     )
 
 
-# ── Real SDK implementation (skeleton) ────────────────────────────────
+# ── Real SDK implementation ───────────────────────────────────────
+
+def _powershell32() -> Path:
+    if os.name != "nt":
+        raise MantraSensorError("Direct MFS100 capture requires Windows.")
+    windows = Path(os.environ.get("WINDIR", r"C:\Windows"))
+    candidates = [
+        windows / "SysWOW64" / "WindowsPowerShell" / "v1.0" / "powershell.exe",
+        windows / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise MantraSensorError("32-bit Windows PowerShell was not found.")
+
+
+def _run_sdk_helper(action: str, timeout_seconds: float = 15.0) -> dict:
+    if not _CAPTURE_HELPER.is_file():
+        raise MantraSensorError(f"MFS100 helper is missing: {_CAPTURE_HELPER}")
+    sdk_dir = os.environ.get("MFS100_SDK_DIR", str(_DEFAULT_SDK_DIR))
+    command = [
+        str(_powershell32()), "-NoProfile", "-NonInteractive",
+        "-ExecutionPolicy", "Bypass", "-File", str(_CAPTURE_HELPER),
+        "-Action", action, "-TimeoutSeconds", str(max(1, int(timeout_seconds))),
+        "-SdkDirectory", sdk_dir,
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=max(10.0, timeout_seconds + 10.0),
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise MantraSensorError("The MFS100 SDK did not respond before the timeout.") from exc
+    except OSError as exc:
+        raise MantraSensorError(f"Could not start the MFS100 helper: {exc}") from exc
+
+    payload = None
+    for line in reversed(completed.stdout.splitlines()):
+        try:
+            candidate = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(candidate, dict) and "ok" in candidate:
+            payload = candidate
+            break
+    if not payload:
+        detail = completed.stderr.strip() or "The helper returned no valid response."
+        raise MantraSensorError(detail)
+    if not payload.get("ok"):
+        raise MantraSensorError(payload.get("error") or "MFS100 operation failed.")
+    return payload
 
 def _real_sdk_available() -> tuple[bool, str]:
     """Check whether the Mantra SDK is present and the device is reachable.
 
-    This is a light probe — it must not raise, and must not hang if the
-    device is unplugged. Currently returns False because the SDK has not
-    yet been downloaded / integrated. Update this function once the SDK
-    is installed.
+    This is a bounded SDK initialization probe; it never raises.
     """
-    # TODO — once the physical sensor and SDK arrive:
-    #
-    # Approach A (recommended — subprocess):
-    #   Compile a small C# capture helper that Mantra ships in
-    #   SDK/Samples/CSharp/. Modify it to write the captured image to a
-    #   given path and print quality/serial as stdout JSON. From Python,
-    #   subprocess.run(["MantraCapture.exe", "--out", "capture.png"]).
-    #   Check for the helper's presence here.
-    #
-    # Approach B (ctypes):
-    #   Load MFS100.dll directly and bind CaptureFinger, StreamStart,
-    #   etc. via ctypes. More brittle, more control.
-    #
-    # Approach C (pythonnet):
-    #   Load the C# wrapper DLL through pythonnet.
-    #
-    return False, ("Real-mode SDK not yet wired. Install the Mantra "
-                   "MFS100 SDK, then update _real_sdk_available() and "
-                   "_real_capture() in mantra_sensor.py.")
+    try:
+        payload = _run_sdk_helper("status", timeout_seconds=5)
+        name = " ".join(filter(None, [payload.get("make"), payload.get("model")])).strip()
+        serial = payload.get("serial") or "serial unavailable"
+        return True, f"{name or 'Mantra MFS100'} ready ({serial})"
+    except MantraSensorError as exc:
+        return False, str(exc)
 
 
 def _real_capture(*, timeout_seconds: float) -> MantraCaptureResult:
-    """Placeholder — raises until the SDK is wired.
-
-    When implementing:
-      1. Trigger the sensor stream / auto-capture with the SDK.
-      2. Wait for a finger to be placed (up to timeout_seconds).
-      3. Retrieve the raw image bytes (typically BMP or raw grey).
-      4. Wrap into a PNG buffer for uniform downstream handling.
-      5. Read quality score if the SDK exposes it (MFS100 usually
-         returns an NFIQ-like score in the range 0-100).
-      6. Read the device serial once via the SDK's info call.
-      7. Return a MantraCaptureResult.
-    """
-    raise MantraSensorError(
-        "Real capture is not yet implemented. Install the Mantra MFS100 "
-        "SDK, then wire _real_capture() in app/services/mantra_sensor.py."
+    """Start AutoCapture and return its in-memory PNG result."""
+    if capture_transport() != "direct":
+        raise MantraSensorError(
+            "This Streamlit server cannot access the local USB scanner. "
+            "Use the browser-side Mantra bridge."
+        )
+    payload = _run_sdk_helper("capture", timeout_seconds=timeout_seconds)
+    try:
+        image_bytes = base64.b64decode(payload["image_base64"], validate=True)
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            image.verify()
+    except (KeyError, ValueError, OSError) as exc:
+        raise MantraSensorError("The MFS100 SDK returned an invalid image.") from exc
+    return MantraCaptureResult(
+        image_bytes=image_bytes,
+        width=int(payload["width"]),
+        height=int(payload["height"]),
+        dpi=int(payload.get("dpi") or 500),
+        quality=(int(payload["quality"])
+                 if payload.get("quality") is not None else None),
+        captured_at=payload.get("captured_at") or datetime.now().isoformat(timespec="seconds"),
+        mode="real",
+        device_serial=payload.get("serial"),
     )

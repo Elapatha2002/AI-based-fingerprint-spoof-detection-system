@@ -106,7 +106,7 @@ with auth.render_scope():
             classifier.assert_called_once_with('fixture.png', content.getvalue())
             self.assertIsNotNone(app.button(key='sr_report'))
 
-    def test_identity_is_queried_once_per_render_but_not_cached_between_clicks(self):
+    def test_identity_is_queried_once_then_briefly_cached_for_navigation(self):
         session = {'current_user': self.user}
         with patch.object(auth, 'st', SimpleNamespace(session_state=session)), \
                 patch.object(db, 'get_user', wraps=db.get_user) as fetch:
@@ -115,6 +115,19 @@ with auth.render_scope():
                 self.assertTrue(auth.is_super_admin())
                 self.assertEqual(auth.current_user()['username'], 'fixture')
             self.assertEqual(fetch.call_count, 1)
+            with auth.render_scope():
+                self.assertTrue(auth.is_logged_in())
+            self.assertEqual(fetch.call_count, 1)
+
+    def test_navigation_identity_cache_expires(self):
+        session = {'current_user': self.user}
+        with patch.object(auth, 'st', SimpleNamespace(session_state=session)), \
+                patch.object(db, 'get_user', wraps=db.get_user) as fetch, \
+                patch.object(auth.time, 'monotonic', side_effect=[1.0, 5.0, 32.0, 32.0]):
+            with auth.render_scope():
+                self.assertTrue(auth.is_logged_in())
+            with auth.render_scope():
+                self.assertTrue(auth.is_logged_in())
             with auth.render_scope():
                 self.assertTrue(auth.is_logged_in())
             self.assertEqual(fetch.call_count, 2)
@@ -141,6 +154,10 @@ class PoolTests(unittest.TestCase):
             self.assertIs(pg._get_pool(url), pg._get_pool(url))
             factory.assert_called_once()
             self.assertEqual(factory.call_args.kwargs['max_size'], 3)
+            self.assertEqual(factory.call_args.kwargs['min_size'], 0)
+            self.assertEqual(factory.call_args.kwargs['timeout'], 15)
+            self.assertNotIn('check', factory.call_args.kwargs)
+            self.assertEqual(factory.call_args.kwargs['kwargs']['connect_timeout'], 10)
             pg.close_pools()
             fake_pool.close.assert_called_once()
 

@@ -32,10 +32,11 @@ def _resolve_model_card() -> tuple[float, float, float, float, float, str, str]:
 
     if os.environ.get("FSDXAI_REAL_MODEL") == "1":
         try:
-            from services.real_model import get_service_info
-            svc = get_service_info()
-            ckpt_short = svc.get("checkpoint_short") or ckpt_short
-            arch = svc.get("name") or arch
+            # The methodology page needs configuration and metrics, not model
+            # weights. Keep navigation here independent of PyTorch/checkpoint I/O.
+            from app.services.model_config import configured_selection
+            arch, checkpoint = configured_selection(st.session_state)
+            ckpt_short = checkpoint.parent.name or ckpt_short
         except Exception:
             pass
 

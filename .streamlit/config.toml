@@ -10,6 +10,7 @@ font = "sans serif"
 headless = true
 runOnSave = true
 maxUploadSize = 50
+enableStaticServing = true
 
 [browser]
 gatherUsageStats = false

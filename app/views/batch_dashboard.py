@@ -47,18 +47,28 @@ def render():
         "Aggregate analysis across all uploaded images",
     )
 
-    # Top: export buttons
-    e1, e2, e3 = st.columns([1, 1, 6])
-    with e1:
-        csv_bytes = _build_csv(results)
-        st.download_button("Download results (CSV)", data=csv_bytes,
-                           file_name=f"{meta['case_id']}_results.csv",
-                           mime="text/csv", width="stretch")
-    with e2:
-        zip_bytes = _build_zip_bundle(results, meta)
-        st.download_button("Download case bundle (ZIP)", data=zip_bytes,
-                           file_name=f"{meta['case_id']}_bundle.zip",
-                           mime="application/zip", width="stretch")
+    # Top: concise, equal-sized export actions. The former long labels wrapped
+    # to different line counts and made two equivalent actions look unequal.
+    with st.container(key="batch_export_actions"):
+        e1, e2, e3 = st.columns([1, 1, 5])
+        with e1:
+            csv_bytes = _build_csv(results)
+            st.download_button(
+                "Download CSV", data=csv_bytes,
+                file_name=f"{meta['case_id']}_results.csv",
+                mime="text/csv", width="stretch",
+                icon=":material/download:",
+                help="Download the batch result table as CSV.",
+            )
+        with e2:
+            zip_bytes = _build_zip_bundle(results, meta)
+            st.download_button(
+                "Download ZIP", data=zip_bytes,
+                file_name=f"{meta['case_id']}_bundle.zip",
+                mime="application/zip", width="stretch",
+                icon=":material/archive:",
+                help="Download the case summary and manifest as a ZIP bundle.",
+            )
 
     st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 

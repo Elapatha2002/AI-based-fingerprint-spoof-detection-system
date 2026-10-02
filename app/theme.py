@@ -763,11 +763,16 @@ div[data-testid="stMetricValue"] {
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  color: #06101A;
-  background: linear-gradient(135deg, #77B9FF, var(--accent-info));
-  font-weight: 800;
-  font-size: 18px;
+  background: rgba(88,166,255,0.08);
+  border: 1px solid rgba(88,166,255,0.22);
   box-shadow: 0 6px 18px rgba(88,166,255,0.24);
+  overflow: hidden;
+}
+.fsd-brand-mark img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  display: block;
 }
 .fsd-brand-name {
   color: var(--text-primary);
@@ -814,6 +819,29 @@ div[data-testid="stMetricValue"] {
   color: #06101A !important;
   background: var(--accent-info) !important;
   border-color: var(--accent-info) !important;
+}
+
+/* Compact account action: keep a 44px target without stretching it across
+   the full navigation column. */
+.st-key-nav_signout {
+  display: flex;
+  justify-content: flex-end;
+}
+.st-key-nav_signout button {
+  width: auto !important;
+  min-width: 96px;
+  padding-inline: 18px !important;
+}
+
+/* Batch exports are peer actions and must have identical geometry. */
+.st-key-batch_export_actions [data-testid="stDownloadButton"] button {
+  height: 46px !important;
+  min-height: 46px !important;
+  white-space: nowrap;
+  padding-inline: 14px !important;
+}
+.st-key-batch_export_actions [data-testid="stDownloadButton"] p {
+  white-space: nowrap;
 }
 
 /* Clear affordances, sufficiently large targets, and obvious keyboard focus. */
@@ -993,17 +1021,22 @@ div[data-testid="stMetric"] {
   text-align: center;
 }
 .fsd-login-mark {
-  width: 48px;
-  height: 48px;
+  width: 72px;
+  height: 72px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #77B9FF, var(--accent-info));
-  color: #06101A;
-  font-size: 24px;
-  font-weight: 800;
-  box-shadow: 0 10px 28px rgba(88,166,255,0.28);
+  border-radius: 18px;
+  background: rgba(88,166,255,0.06);
+  border: 1px solid rgba(88,166,255,0.20);
+  box-shadow: 0 10px 28px rgba(88,166,255,0.22);
+  overflow: hidden;
+}
+.fsd-login-mark img {
+  width: 68px;
+  height: 68px;
+  object-fit: contain;
+  display: block;
 }
 .fsd-login-title {
   margin-top: 12px;
@@ -1050,6 +1083,7 @@ div[data-testid="stMetric"] {
 }
 .st-key-login_panel [data-baseweb="input"] {
   min-height: 46px;
+  padding: 0 !important;
   background: var(--bg-surface) !important;
   border: 1px solid var(--border-strong) !important;
   border-radius: 8px !important;
@@ -1070,10 +1104,33 @@ div[data-testid="stMetric"] {
   outline: none !important;
   box-shadow: none !important;
 }
+.st-key-login_panel [data-baseweb="input"] input {
+  background: transparent !important;
+  caret-color: var(--text-primary) !important;
+}
+/* Chromium autofill otherwise paints only the text portion blue-grey and
+   makes the transparent reveal control look like a separate dark block. */
+.st-key-login_panel [data-baseweb="input"] input:-webkit-autofill,
+.st-key-login_panel [data-baseweb="input"] input:-webkit-autofill:hover,
+.st-key-login_panel [data-baseweb="input"] input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-primary) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-surface) inset !important;
+  box-shadow: 0 0 0 1000px var(--bg-surface) inset !important;
+}
 .st-key-login_panel [data-baseweb="input"] button {
   min-width: 44px;
+  width: 44px;
   min-height: 44px;
+  height: 44px;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   border: 0 !important;
+  background: transparent !important;
+}
+.st-key-login_panel [data-baseweb="input"] button:hover,
+.st-key-login_panel [data-baseweb="input"] button:active {
   background: transparent !important;
 }
 .st-key-login_panel [data-baseweb="input"] button:focus-visible {

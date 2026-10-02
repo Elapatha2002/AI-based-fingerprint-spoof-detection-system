@@ -131,7 +131,7 @@ class AccountContract:
     def test_logout_clears_previous_examiner_data(self):
         self.session['history'] = [{'case': 'private'}]
         auth.logout()
-        self.assertEqual(self.session, {})
+        self.assertEqual(self.session, {auth._CLEAR_COOKIE_KEY: True})
 
     def test_concurrent_admin_demotion_preserves_one_admin(self):
         other = auth.create_account(username='admin2', password=PASSWORD, role='super_admin', full_name='Second')

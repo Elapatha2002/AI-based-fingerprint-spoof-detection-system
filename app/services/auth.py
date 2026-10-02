@@ -16,13 +16,18 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import base64
+import binascii
+import json
 import logging
 import os
 import secrets
+import time
 from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
 from contextvars import ContextVar
+from urllib.parse import unquote, urlsplit
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -39,9 +44,15 @@ PBKDF2_ITERATIONS = 200_000
 PBKDF2_ALGO = "sha256"
 SALT_BYTES = 16
 MIN_PASSWORD_LEN = 8
+IDENTITY_RECHECK_SECONDS = 30.0
+_IDENTITY_VERIFIED_KEY = "_identity_verified_at"
+SESSION_COOKIE_NAME = "fsdxai_session"
+SESSION_COOKIE_SECONDS = 8 * 60 * 60
+_CLEAR_COOKIE_KEY = "_clear_browser_session"
 
-# One validation per render, never a cross-request/TTL permission cache.
-# ContextVar isolates concurrent Streamlit session threads.
+# ContextVar isolates concurrent Streamlit session threads. A short per-session
+# verification timestamp prevents an identical cloud query on every tab click;
+# privileged account changes always bypass it and revalidate immediately.
 _render_identity = ContextVar('fsd_render_identity', default=None)
 
 
@@ -58,6 +69,10 @@ def _invalidate_identity():
     memo = _render_identity.get()
     if memo is not None:
         memo.clear()
+    try:
+        st.session_state.pop(_IDENTITY_VERIFIED_KEY, None)
+    except Exception:
+        pass
 
 
 def offline_mode_enabled() -> bool:
@@ -77,6 +92,128 @@ def _offline_operator() -> dict:
         "email": "",
         "offline_mode": True,
     }
+
+
+def _session_signing_key() -> bytes | None:
+    """Derive a dedicated HMAC key without exposing database credentials.
+
+    Deployments may provide FSDXAI_SESSION_SECRET explicitly. Existing
+    Supabase installations fall back to a domain-separated key derived from
+    the high-entropy restricted database-role password already held server-side.
+    """
+    material = os.environ.get("FSDXAI_SESSION_SECRET", "").strip()
+    if not material and database.using_postgres():
+        try:
+            material = unquote(urlsplit(database.DATABASE_URL).password or "")
+        except ValueError:
+            material = ""
+    if len(material) < 32:
+        return None
+    return hashlib.sha256(
+        b"FSD-XAI browser session signing key v1\0" + material.encode("utf-8")
+    ).digest()
+
+
+def _b64encode(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def _b64decode(value: str) -> bytes:
+    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+
+
+def _make_session_token(user: dict, *, now: int | None = None) -> str | None:
+    key = _session_signing_key()
+    if key is None or user.get("offline_mode"):
+        return None
+    issued = int(time.time() if now is None else now)
+    payload = json.dumps({
+        "exp": issued + SESSION_COOKIE_SECONDS,
+        "iat": issued,
+        "sv": int(user.get("session_version", 0)),
+        "uid": str(user["user_id"]),
+    }, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    encoded = _b64encode(payload)
+    signature = _b64encode(hmac.new(key, encoded.encode("ascii"), hashlib.sha256).digest())
+    return f"{encoded}.{signature}"
+
+
+def _read_session_token(token: str, *, now: int | None = None) -> dict | None:
+    key = _session_signing_key()
+    if key is None or not token or len(token) > 2048:
+        return None
+    try:
+        encoded, supplied = token.split(".", 1)
+        expected = _b64encode(
+            hmac.new(key, encoded.encode("ascii"), hashlib.sha256).digest()
+        )
+        if not hmac.compare_digest(supplied, expected):
+            return None
+        payload = json.loads(_b64decode(encoded))
+        current = int(time.time() if now is None else now)
+        if (set(payload) != {"exp", "iat", "sv", "uid"}
+                or not isinstance(payload["uid"], str)
+                or not payload["uid"]
+                or not isinstance(payload["sv"], int)
+                or not isinstance(payload["iat"], int)
+                or not isinstance(payload["exp"], int)
+                or payload["iat"] > current + 60
+                or payload["exp"] <= current
+                or payload["exp"] - payload["iat"] != SESSION_COOKIE_SECONDS):
+            return None
+        return payload
+    except (ValueError, TypeError, KeyError, UnicodeError, binascii.Error):
+        return None
+
+
+def _browser_session_token() -> str:
+    try:
+        return str(st.context.cookies.get(SESSION_COOKIE_NAME, ""))
+    except Exception:
+        return ""
+
+
+def _restore_browser_session() -> Optional[dict]:
+    token = _browser_session_token()
+    payload = _read_session_token(token)
+    if not payload:
+        if token:
+            st.session_state[_CLEAR_COOKIE_KEY] = True
+        return None
+    try:
+        fresh = database.get_user(payload["uid"])
+    except Exception:
+        # Preserve the valid signed token through a temporary cloud outage so
+        # a later refresh can retry; access remains fail-closed in this render.
+        return None
+    if (not fresh or not fresh["active"]
+            or fresh["session_version"] != payload["sv"]):
+        st.session_state[_CLEAR_COOKIE_KEY] = True
+        return None
+    public = {key: value for key, value in fresh.items() if key != "password_hash"}
+    st.session_state["current_user"] = public
+    st.session_state[_IDENTITY_VERIFIED_KEY] = time.monotonic()
+    return public
+
+
+def render_session_cookie(user: Optional[dict]) -> None:
+    """Synchronize the signed refresh session with the current browser."""
+    if not user and not st.session_state.pop(_CLEAR_COOKIE_KEY, False):
+        return
+    token = _make_session_token(user) if user else None
+    try:
+        url = str(st.context.url)
+        secure = urlsplit(url).scheme.lower() == "https"
+    except Exception:
+        secure = False
+    from app.components.session_cookie import sync_session_cookie
+    sync_session_cookie(
+        name=SESSION_COOKIE_NAME,
+        value=token or "",
+        max_age=SESSION_COOKIE_SECONDS,
+        secure=secure,
+        key="fsdxai_session_cookie",
+    )
 
 
 # ── Password hashing (stdlib only) ────────────────────────────────────
@@ -154,8 +291,15 @@ def seed_super_admin_if_needed() -> Optional[str]:
 
 # ── Streamlit session helpers ────────────────────────────────────────
 
-def current_user() -> Optional[dict]:
-    """Return the currently logged-in user dict, or None if not logged in."""
+def current_user(*, force_refresh: bool = False) -> Optional[dict]:
+    """Return the signed-in user, periodically revalidating cloud sessions.
+
+    Within a Streamlit render scope, a recently verified identity can be used
+    for ordinary navigation for a few seconds. Account mutations force a fresh
+    database check and the database transaction independently verifies the
+    actor's role/session version. Calls outside a render scope always recheck,
+    which keeps scripts and security tests fail-closed.
+    """
     if offline_mode_enabled():
         # The local launcher binds the server to 127.0.0.1. Do not create,
         # reset, or expose a persisted password just to run the demo locally.
@@ -163,11 +307,19 @@ def current_user() -> Optional[dict]:
         return st.session_state['current_user']
     cached = st.session_state.get('current_user')
     if not cached:
+        cached = _restore_browser_session()
+    if not cached:
         return None
     memo = _render_identity.get()
     identity = (cached.get('user_id'), cached.get('session_version', 0))
-    if memo is not None and memo.get('identity') == identity:
+    if not force_refresh and memo is not None and memo.get('identity') == identity:
         return memo['user']
+    verified_at = st.session_state.get(_IDENTITY_VERIFIED_KEY)
+    if (memo is not None and not force_refresh and verified_at is not None
+            and time.monotonic() - float(verified_at) < IDENTITY_RECHECK_SECONDS):
+        if memo is not None:
+            memo.update(identity=identity, user=cached)
+        return cached
     try:
         fresh = database.get_user(cached.get('user_id'))
     except Exception:
@@ -175,9 +327,11 @@ def current_user() -> Optional[dict]:
     if (not fresh or not fresh['active'] or
             fresh['session_version'] != cached.get('session_version', 0)):
         st.session_state.clear()
+        st.session_state[_CLEAR_COOKIE_KEY] = True
         return None
     public = {k: v for k, v in fresh.items() if k != 'password_hash'}
     st.session_state['current_user'] = public
+    st.session_state[_IDENTITY_VERIFIED_KEY] = time.monotonic()
     if memo is not None:
         memo.update(identity=identity, user=public)
     return public
@@ -197,6 +351,18 @@ def is_examiner() -> bool:
     return bool(u and u.get("role") == "examiner")
 
 
+def _transient_database_error(error: Exception) -> bool:
+    """Return whether a failed read is safe to retry once."""
+    if not database.using_postgres():
+        return False
+    try:
+        from psycopg import InterfaceError, OperationalError
+        from psycopg_pool import PoolTimeout
+        return isinstance(error, (InterfaceError, OperationalError, PoolTimeout))
+    except ImportError:
+        return False
+
+
 def login(username: str, password: str) -> tuple[bool, str]:
     """Attempt login. On success, stores user in session and returns (True, '').
     On failure, returns (False, error_message)."""
@@ -205,10 +371,18 @@ def login(username: str, password: str) -> tuple[bool, str]:
         return False, "Username and password are required."
 
     st.session_state.pop('current_user', None)
-    try:
-        user = database.get_user_by_username(username.strip())
-    except Exception:
-        return False, 'Database unavailable. Please try again or contact your administrator.'
+    user = None
+    for attempt in range(2):
+        try:
+            user = database.get_user_by_username(username.strip())
+            break
+        except Exception as error:
+            # Login is a read-only lookup, so one retry is safe when a pooled
+            # connection has gone stale or the regional TLS handshake drops.
+            if attempt == 0 and _transient_database_error(error):
+                continue
+            logger.warning("Login database lookup failed (%s)", type(error).__name__)
+            return False, 'Database unavailable. Please try again or contact your administrator.'
     if not user:
         return False, "Invalid username or password."
     if not user.get("active"):
@@ -220,6 +394,7 @@ def login(username: str, password: str) -> tuple[bool, str]:
     user_copy = {k: v for k, v in user.items() if k != "password_hash"}
     st.session_state.clear()  # Do not retain a previous examiner's case context.
     st.session_state["current_user"] = user_copy
+    st.session_state[_IDENTITY_VERIFIED_KEY] = time.monotonic()
     try:
         database.touch_last_login(user["user_id"])
     except Exception:
@@ -234,6 +409,7 @@ def logout() -> None:
         # The recovery operator is restored at the next app rerun.
         return
     st.session_state.clear()
+    st.session_state[_CLEAR_COOKIE_KEY] = True
 
 
 def require_role(role: str) -> bool:
@@ -250,7 +426,8 @@ def require_role(role: str) -> bool:
 
 
 def _account_action(operation, *, target_id=None, values=None):
-    user = current_user()
+    # Never authorize a mutation from the short navigation cache.
+    user = current_user(force_refresh=True)
     if not user or user.get('offline_mode'):
         raise PermissionError('Sign in with a database account to manage users.')
     try:

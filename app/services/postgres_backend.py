@@ -27,9 +27,11 @@ def _get_pool(url):
     with _pool_lock:
         if url not in _pools:
             _pools[url] = ConnectionPool(
-                url, min_size=0, max_size=3, timeout=10, max_waiting=10,
-                max_idle=60, max_lifetime=600, open=True,
-                check=ConnectionPool.check_connection,
+                # Supabase's shared pooler can take several seconds to complete
+                # TLS negotiation from this region. Open lazily, retain working
+                # connections, and avoid an additional SELECT 1 for every lease.
+                url, min_size=0, max_size=3, timeout=15, max_waiting=10,
+                max_idle=600, max_lifetime=1800, open=True,
                 kwargs=dict(connect_timeout=10, row_factory=dict_row,
                             prepare_threshold=None),
             )

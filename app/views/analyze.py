@@ -1,4 +1,7 @@
 """Screen 2 — Analyze (single + batch zip upload)."""
+import base64
+from io import BytesIO
+
 import streamlit as st
 from components.cards import page_title, banner
 from components.audit import log_action
@@ -11,6 +14,7 @@ SENSORS = [
     "Biometrika 400B",
     "CrossMatch 300",
     "Digital Persona U.are.U",
+    "Mantra MFS100",
     "Other",
     "Unknown",
 ]
@@ -111,9 +115,20 @@ def _render_single_tab():
             key="single_source",
         )
 
+        previous_source = st.session_state.get("_single_source_selection")
+        if previous_source != source:
+            st.session_state["single_source_bytes"] = None
+            st.session_state["single_source_filename"] = None
+            st.session_state["single_source_kind"] = None
+            st.session_state["single_last_capture_info"] = None
+            st.session_state["_single_source_selection"] = source
+
         if source.startswith("Upload"):
             _render_file_uploader()
         else:
+            # Keep forensic metadata consistent with the actual capture source.
+            st.session_state.form_sensor = "Mantra MFS100"
+            st.session_state["single_sensor"] = "Mantra MFS100"
             _render_sensor_capture()
 
     with cols[1]:
@@ -189,7 +204,8 @@ def _render_file_uploader():
 def _render_sensor_capture():
     """Live-sensor source. Populates single_source_bytes and _filename."""
     from app.services.mantra_sensor import (
-        capture_fingerprint, is_available, MantraSensorError,
+        bridge_url, capture_fingerprint, capture_transport, current_mode,
+        is_available, MantraSensorError,
     )
 
     st.markdown(
@@ -197,7 +213,41 @@ def _render_sensor_capture():
         unsafe_allow_html=True,
     )
 
-    ok, _ = is_available()
+    # With hosted Streamlit, this component executes the request in the user's
+    # browser so 127.0.0.1 means the examiner's PC, not the cloud server.
+    if current_mode() == "real" and capture_transport() == "bridge":
+        from components.mantra_capture import render_mantra_capture
+        payload = render_mantra_capture(bridge_url=bridge_url())
+        if payload and payload.get("ok"):
+            capture_id = payload.get("capture_id")
+            if capture_id and capture_id != st.session_state.get("single_capture_id"):
+                try:
+                    image_bytes = base64.b64decode(payload["image_base64"], validate=True)
+                    img, err = load_image(BytesIO(image_bytes))
+                    if err or img is None:
+                        raise ValueError(err or "Invalid image")
+                    captured_at = payload.get("captured_at", "capture")
+                    filename = f"mantra_{captured_at.replace(':', '-')}.png"
+                    st.session_state["single_source_bytes"] = image_bytes
+                    st.session_state["single_source_filename"] = filename
+                    st.session_state["single_source_kind"] = "sensor_capture"
+                    st.session_state["single_capture_id"] = capture_id
+                    st.session_state["single_last_capture_info"] = {
+                        "width": int(payload.get("width") or img.width),
+                        "height": int(payload.get("height") or img.height),
+                        "dpi": int(payload.get("dpi") or 500),
+                        "quality": payload.get("quality"),
+                        "nfiq": payload.get("nfiq"),
+                        "serial": payload.get("serial"),
+                        "captured_at": captured_at,
+                    }
+                except (KeyError, ValueError, TypeError) as exc:
+                    banner(f"Capture failed: the local bridge returned an invalid image ({exc}).",
+                           kind="error")
+        _render_last_sensor_capture()
+        return
+
+    ok, status_message = is_available()
     if ok:
         st.markdown(
             "<div class='fsd-mono' style='font-size:12px;margin-bottom:12px;'>"
@@ -205,6 +255,7 @@ def _render_sensor_capture():
             "</div>",
             unsafe_allow_html=True,
         )
+        st.caption(status_message)
     else:
         st.markdown(
             "<div class='fsd-mono' style='font-size:12px;margin-bottom:12px;'>"
@@ -213,7 +264,7 @@ def _render_sensor_capture():
             unsafe_allow_html=True,
         )
         banner(
-            "Connect the Mantra MFS100 device to a USB port and reload the page.",
+            status_message,
             kind="warn",
         )
         return
@@ -224,7 +275,7 @@ def _render_sensor_capture():
                   key="single_capture_btn"):
         try:
             with st.spinner("Waiting for finger on sensor..."):
-                result = capture_fingerprint()
+                result = capture_fingerprint(timeout_seconds=20)
 
             filename = f"sensor_{result.captured_at.replace(':', '-')}.png"
             st.session_state["single_source_bytes"] = result.image_bytes
@@ -235,21 +286,30 @@ def _render_sensor_capture():
                 "height": result.height,
                 "dpi": result.dpi,
                 "quality": result.quality,
+                "serial": result.device_serial,
                 "captured_at": result.captured_at,
             }
         except MantraSensorError as e:
             banner(f"Capture failed: {e}", kind="error")
 
-    if (st.session_state.get("single_source_kind") == "sensor_capture"
-            and st.session_state.get("single_source_bytes")):
-        from PIL import Image
-        from io import BytesIO
-        img = Image.open(BytesIO(st.session_state["single_source_bytes"]))
-        info = st.session_state.get("single_last_capture_info", {})
-        cap = (f"{info.get('width', '?')}×{info.get('height', '?')} px "
-               f"@ {info.get('dpi', '?')} DPI · quality "
-               f"{info.get('quality', '—')}")
-        st.image(img, caption=cap, width=320)
+    _render_last_sensor_capture()
+
+
+def _render_last_sensor_capture():
+    if (st.session_state.get("single_source_kind") != "sensor_capture"
+            or not st.session_state.get("single_source_bytes")):
+        return
+    from PIL import Image
+    img = Image.open(BytesIO(st.session_state["single_source_bytes"]))
+    info = st.session_state.get("single_last_capture_info", {}) or {}
+    details = [
+        f"{info.get('width', '?')}×{info.get('height', '?')} px",
+        f"{info.get('dpi', '?')} DPI",
+        f"quality {info.get('quality') if info.get('quality') is not None else 'not reported'}",
+    ]
+    if info.get("nfiq") is not None:
+        details.append(f"NFIQ {info['nfiq']}")
+    st.image(img, caption=" · ".join(details), width=320)
 
 
 def _render_batch_tab():

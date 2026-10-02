@@ -21,7 +21,7 @@ import streamlit as st  # noqa: E402
 
 st.set_page_config(
     page_title="FSD-XAI · Forensic Spoof Detection",
-    page_icon="◼",
+    page_icon=str(HERE / "static" / "brand" / "fsd-xai-logo.png"),
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -76,10 +76,18 @@ def main():
     init_state()
     _bootstrap_once()
 
-    # AUTH GATE — if nobody is logged in, render only the login page.
-    if not auth.is_logged_in():
-        login.render()
-        return
+    # AUTH GATE — restore a signed browser session after a full refresh. A
+    # successful form submission continues into Home in this same execution,
+    # avoiding a second loading/rerun transition.
+    user = auth.current_user()
+    if not user:
+        if not login.render():
+            auth.render_session_cookie(None)
+            return
+        init_state()  # login clears the previous examiner's transient state
+        user = auth.current_user()
+
+    auth.render_session_cookie(user)
 
     render_nav()
 

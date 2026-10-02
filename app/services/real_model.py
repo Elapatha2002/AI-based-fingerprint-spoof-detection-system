@@ -21,7 +21,6 @@ and faithfulness metrics show it's a strong choice (see thesis §4.5).
 from __future__ import annotations
 
 import io
-import os
 import re
 import sys
 import time
@@ -37,17 +36,17 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from app.services.model_config import (
+    DEFAULT_CHECKPOINT, DEFAULT_MODEL_NAME, configured_selection,
+    list_available_checkpoints, require_materialized_checkpoint,
+)
+
 
 # Make `src.*` importable when Streamlit runs `streamlit_app.py`
 APP_DIR = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = APP_DIR.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-
-
-DEFAULT_CHECKPOINT = (PROJECT_ROOT / "checkpoints" /
-                      "mobilenetv3_large_20260616_105902" / "best.pth")
-DEFAULT_MODEL_NAME = "mobilenetv3_large"
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -58,6 +57,13 @@ DEFAULT_MODEL_NAME = "mobilenetv3_large"
 def _load_model(model_name: str, ckpt_str: str) -> dict:
     """Cache key includes (model_name, ckpt_str) — each combination is cached
     separately, so switching models in the UI doesn't reload already-seen ones."""
+    ckpt_path = Path(ckpt_str)
+    if not ckpt_path.is_absolute():
+        ckpt_path = PROJECT_ROOT / ckpt_path
+    # Fail before allocating a neural network when a clone contains only the
+    # small Git LFS pointer. This replaces PyTorch's cryptic "invalid load key v".
+    require_materialized_checkpoint(ckpt_path)
+
     from src.models.factory import get_model, MODEL_REGISTRY
     from src.xai.base import disable_inplace_ops, clear_all_hooks
 
@@ -65,15 +71,6 @@ def _load_model(model_name: str, ckpt_str: str) -> dict:
         raise RuntimeError(
             f"Unknown model architecture: {model_name!r}. "
             f"Allowed: {list(MODEL_REGISTRY.keys())}"
-        )
-
-    ckpt_path = Path(ckpt_str)
-    if not ckpt_path.is_absolute():
-        ckpt_path = PROJECT_ROOT / ckpt_path
-    if not ckpt_path.exists():
-        raise FileNotFoundError(
-            f"Checkpoint not found: {ckpt_path}\n"
-            f"Set FSDXAI_CHECKPOINT to a valid path before launching."
         )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -107,54 +104,8 @@ def _load_model(model_name: str, ckpt_str: str) -> dict:
 def get_service_info() -> dict:
     """Resolve which checkpoint to load (session state > env var > default)
     and return its cached service info."""
-    model_name = (
-        st.session_state.get("selected_model")
-        or os.environ.get("FSDXAI_MODEL", DEFAULT_MODEL_NAME)
-    )
-    ckpt_str = (
-        st.session_state.get("selected_checkpoint")
-        or os.environ.get("FSDXAI_CHECKPOINT", str(DEFAULT_CHECKPOINT))
-    )
-    return _load_model(model_name, ckpt_str)
-
-
-def list_available_checkpoints() -> list[dict]:
-    """Walk <project>/checkpoints/* and return entries that have a best.pth."""
-    ckpt_root = PROJECT_ROOT / "checkpoints"
-    if not ckpt_root.exists():
-        return []
-
-    found = []
-    for sub in sorted(ckpt_root.iterdir()):
-        if not sub.is_dir():
-            continue
-        best = sub / "best.pth"
-        if not best.exists():
-            continue
-        name = sub.name
-        # Guess architecture from folder prefix. Order matters — more specific
-        # prefixes MUST come first so e.g. "mobilenet_fsd_cbam_20260819" is
-        # matched as the mobile variant, not as plain mobilenetv3_large.
-        if name.startswith("mobilenet_fsd_cbam"):
-            arch = "mobilenet_fsd_cbam"
-        elif name.startswith("fsd_cbam_v2_20260810_122231"):
-            arch = "fsd_cbam"
-        elif name.startswith("resnet50_cbam"):
-            arch = "resnet50_cbam"
-        elif name.startswith("resnet50"):
-            arch = "resnet50"
-        elif name.startswith("mobilenetv3_large"):
-            arch = "mobilenetv3_large"
-        elif name.startswith("mobilenetv3_small"):
-            arch = "mobilenetv3_small"
-        else:
-            continue
-        found.append({
-            "folder": name,
-            "arch": arch,
-            "path": str(best),
-        })
-    return found
+    model_name, checkpoint = configured_selection(st.session_state)
+    return _load_model(model_name, str(checkpoint))
 
 
 # ─────────────────────────────────────────────────────────────────────────

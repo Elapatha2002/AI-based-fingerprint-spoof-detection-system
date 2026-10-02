@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Session synchronization</title></head>
+<body style="display:none">
+<script>
+  function post(type, extra = {}) {
+    window.parent.postMessage({isStreamlitMessage: true, type, ...extra}, "*");
+  }
+
+  function applyCookie(args) {
+    const name = String(args.name || "");
+    const value = String(args.value || "");
+    if (!name) return;
+    let cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; Path=/; SameSite=Strict`;
+    if (value) cookie += `; Max-Age=${Math.max(0, Number(args.max_age) || 0)}`;
+    else cookie += "; Max-Age=0";
+    if (args.secure) cookie += "; Secure";
+    document.cookie = cookie;
+  }
+
+  window.addEventListener("message", (event) => {
+    if (event.data?.type !== "streamlit:render") return;
+    applyCookie(event.data.args || {});
+    post("streamlit:setFrameHeight", {height: 0});
+  });
+  post("streamlit:componentReady", {apiVersion: 1});
+</script>
+</body>
+</html>

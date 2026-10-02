@@ -117,6 +117,14 @@ python -m streamlit run app/streamlit_app.py
 Open the local URL printed in the terminal. Sign in with the **application
 username and application password you chose**, not the Supabase password.
 
+The browser keeps a signed session for up to eight hours, so a normal refresh
+does not return the examiner to the login page. The cookie contains only an
+opaque signed account identifier/version and expiry, never a password or case
+data. It is revalidated against the database after a full refresh. Signing out,
+disabling the account, changing its password or changing its role invalidates
+the session. Hosted deployments must use HTTPS; browsers with cookies disabled
+cannot retain the session across a refresh.
+
 ## 5. Manage examiner accounts
 
 1. Sign in as your super admin.
@@ -163,12 +171,14 @@ user permissions. Never expose database/S3 credentials to application users.
 The navigation bar previously redirected internal result/processing pages to
 Home, so Run analysis could never reach the classifier. Navigation now uses
 change callbacks instead of triggering a second full render, and the single
-analysis button prepares its result page in a callback. Account validation is
-shared within one render only; the next interaction revalidates it. Mutations
-still verify account permissions inside their database transaction.
+analysis button prepares its result page in a callback. Ordinary navigation
+reuses a verified identity for up to 30 seconds. Account mutations bypass that
+short cache and verify permissions inside their database transaction.
 
-PostgreSQL connections now use a bounded, thread-safe pool (up to three per
-application process). Cloud schema checks no longer run on every UI click.
+PostgreSQL connections now use a lazy, bounded, thread-safe pool (up to three
+per application process). Cloud schema checks no longer run on every UI click.
+The pool allows enough time for Supabase's regional TLS negotiation and does
+not issue a separate health query for every connection lease.
 These changes follow the documented
 [Streamlit callback API](https://docs.streamlit.io/develop/api-reference/widgets/st.pills)
 and [Psycopg connection-pool lifecycle](https://www.psycopg.org/psycopg3/docs/advanced/pool.html).

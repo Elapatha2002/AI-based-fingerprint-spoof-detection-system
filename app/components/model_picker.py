@@ -13,6 +13,7 @@ memory across reruns.
 import json
 import os
 from pathlib import Path
+from html import escape
 
 import streamlit as st
 
@@ -50,8 +51,8 @@ def render_model_picker():
         )
         return
 
-    from services.real_model import (
-        list_available_checkpoints, get_service_info,
+    from app.services.model_config import (
+        checkpoint_state, configured_selection, list_available_checkpoints,
     )
 
     options = list_available_checkpoints()
@@ -66,17 +67,8 @@ def render_model_picker():
         return
 
     # Current active checkpoint (from session state OR env var)
-    current_arch = (
-        st.session_state.get("selected_model")
-        or os.environ.get("FSDXAI_MODEL", "mobilenetv3_large")
-    )
-    current_path = (
-        st.session_state.get("selected_checkpoint")
-        or os.environ.get(
-            "FSDXAI_CHECKPOINT",
-            options[0]["path"] if options else "",
-        )
-    )
+    current_arch, current_checkpoint = configured_selection(st.session_state)
+    current_path = str(current_checkpoint)
 
     labels = [f"{o['arch']}  ·  {o['folder']}" for o in options]
     current_idx = 0
@@ -108,10 +100,13 @@ def render_model_picker():
         st.toast(f"Switched to {chosen['arch']}", icon="🔄")
         st.rerun()
 
-    # Show what's currently loaded (this also triggers initial load)
+    # Configuration pages must not load a 100+ MB checkpoint on every rerun.
+    # Actual loading is on first analysis or the explicit validation button.
     try:
-        svc = get_service_info()
-        metrics = _load_test_metrics(svc["checkpoint_short"])
+        checkpoint = Path(chosen["path"])
+        state, state_label = checkpoint_state(checkpoint)
+        checkpoint_short = checkpoint.parent.name
+        metrics = _load_test_metrics(checkpoint_short)
 
         # Build the test-metrics lines only if we have a metrics file for
         # this checkpoint (some older or in-progress checkpoints won't).
@@ -145,21 +140,36 @@ def render_model_picker():
         st.markdown(
             f"""
             <div class='fsd-card'>
-              <div class='fsd-card-title'>Currently loaded</div>
+              <div class='fsd-card-title'>Configured model</div>
               <div class='fsd-mono' style='font-size:13px;line-height:1.8;'>
-                Architecture &nbsp;:&nbsp; <b>{svc['name']}</b><br/>
-                Checkpoint &nbsp;&nbsp;&nbsp;:&nbsp; {svc['checkpoint_short']}<br/>
-                Device &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp; {svc['device']}<br/>
+                Architecture &nbsp;:&nbsp; <b>{escape(chosen['arch'])}</b><br/>
+                Checkpoint &nbsp;&nbsp;&nbsp;:&nbsp; {escape(checkpoint_short)}<br/>
+                File status &nbsp;&nbsp;:&nbsp; {escape(state_label)}<br/>
+                Loading &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp; on first analysis<br/>
                 {metric_lines}
               </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
+        if st.button("Validate model now", key="validate_selected_model"):
+            if state != "ready":
+                st.error(
+                    "Model data is unavailable. Run 'git lfs install' and "
+                    "'git lfs pull', then restart the application."
+                )
+            else:
+                try:
+                    from app.services.real_model import get_service_info
+                    with st.spinner("Loading and validating model..."):
+                        svc = get_service_info()
+                    st.success(f"{svc['name']} loaded successfully on {svc['device']}.")
+                except Exception as error:
+                    st.error(f"Model validation failed: {type(error).__name__}: {error}")
     except Exception as e:
         st.markdown(
             f"<div class='fsd-banner error'>"
-            f"Failed to load model: {type(e).__name__}: {e}"
+            f"Could not read model configuration: {type(e).__name__}: {escape(str(e))}"
             f"</div>",
             unsafe_allow_html=True,
         )
