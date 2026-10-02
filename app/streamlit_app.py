@@ -1,16 +1,23 @@
 """
 FSD-XAI — Streamlit entry point.
 
-Run from the app/ folder:
-    streamlit run streamlit_app.py
+Run from the project root (recommended):
+    python -m streamlit run app/streamlit_app.py
 """
 import sys
 from pathlib import Path
 
-# Ensure local module imports work whether started from app/ or project root
+# Streamlit Cloud executes the selected file with its own script directory on
+# sys.path, but that does not make the parent ``app`` package importable.  Keep
+# both paths explicit because the application still contains a mixture of
+# package imports (``app.services``) and legacy top-level imports (``views``,
+# ``components`` and ``services``).
 HERE = Path(__file__).parent.resolve()
-if str(HERE) not in sys.path:
-    sys.path.insert(0, str(HERE))
+PROJECT_ROOT = HERE.parent
+for import_root in (PROJECT_ROOT, HERE):
+    import_path = str(import_root)
+    if import_path not in sys.path:
+        sys.path.insert(0, import_path)
 
 # Load the selected backend before view imports can load legacy .env values.
 from dotenv import load_dotenv
