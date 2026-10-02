@@ -1,9 +1,0 @@
-{
-  "user01": {
-    "user_id": "user01",
-    "display_name": "Pasindu Elapatha",
-    "template_path": "user01.npy",
-    "enrolled_at": "2026-08-20T01:25:56",
-    "finger_label": "right index"
-  }
-}
