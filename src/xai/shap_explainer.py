@@ -16,13 +16,13 @@ Notes
   single-logit binary head, we wrap the model so it outputs (B, 2) using
   [-logit, +logit] — this gives SHAP a "live channel" and "spoof channel"
   to attribute against.
-- Background = 16 random TRAIN images by default. More is fancier but
-  slower; 16 is the sweet spot on CPU.
+- Background = a fixed, versioned set of 8 stratified TRAIN images stored
+  privately. Reusing one verified distribution makes explanations repeatable
+  and keeps hosted CPU/memory cost bounded.
 - DeepExplainer is the slowest of the three XAIs on CPU (~3–10 s/image).
 """
 from __future__ import annotations
 
-import random
 import numpy as np
 import torch
 import torch.nn as nn
@@ -35,8 +35,7 @@ from src.xai.base import (
     preprocess, tensor_to_rgb01, make_overlay_png, attribution_summary,
     disable_inplace_ops, clear_all_hooks,
 )
-from src.data.dataset import load_manifest, FingerprintDataset
-from src.data.transforms import eval_transform
+from src.xai.shap_background import load_fixed_background
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -65,16 +64,11 @@ class _TwoClassWrapper(nn.Module):
 _BG_CACHE: dict[int, torch.Tensor] = {}
 
 
-def _build_background(n: int = 16) -> torch.Tensor:
-    """Sample `n` random TRAIN images, preprocessed, stacked as (n, 3, H, W)."""
+def _build_background(n: int = 8) -> torch.Tensor:
+    """Load the versioned, balanced reference images from private storage."""
     if n in _BG_CACHE:
         return _BG_CACHE[n]
-
-    df = load_manifest()
-    ds = FingerprintDataset(df, "train", eval_transform())
-    indices = random.sample(range(len(ds)), min(n, len(ds)))
-    tensors = [ds[i][0] for i in indices]
-    bg = torch.stack(tensors)
+    bg, _manifest = load_fixed_background(n)
     _BG_CACHE[n] = bg
     return bg
 
@@ -85,7 +79,7 @@ def _build_background(n: int = 16) -> torch.Tensor:
 
 def explain(model: nn.Module, image: Image.Image, model_name: str,
             device: torch.device | None = None,
-            background_n: int = 16,
+            background_n: int = 8,
             target_class: int = 1) -> XAIResult:
     """
     Run SHAP DeepExplainer. Returns spatial attribution heatmap.
@@ -95,8 +89,8 @@ def explain(model: nn.Module, image: Image.Image, model_name: str,
         image:         PIL.Image
         model_name:    unused here but kept in signature for uniformity
         device:        optional torch.device
-        background_n:  size of the background distribution. More is fancier
-                       but slower. 16 is a CPU-friendly default.
+        background_n:  size of the fixed background distribution. Version v1
+                       contains four live and four spoof training images.
         target_class:  0 = explain 'live', 1 = explain 'spoof' (default).
     """
     if device is None:

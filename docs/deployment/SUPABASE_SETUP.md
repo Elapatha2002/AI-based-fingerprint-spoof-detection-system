@@ -114,6 +114,26 @@ failed panels are excluded from saved heatmaps and block complete-XAI reports.
 python -m streamlit run app/streamlit_app.py
 ```
 
+### Provision the fixed SHAP background
+
+SHAP requires a reference distribution in addition to the fingerprint being
+analysed. The hosted application uses a fixed, balanced set of eight training
+images so that explanations are reproducible and do not depend on local
+Windows dataset paths. With `.env.supabase` configured, run this once from the
+project root:
+
+```powershell
+python tools/prepare_shap_background.py --dry-run
+python tools/prepare_shap_background.py
+```
+
+The command uploads four live and four spoof training samples plus a checksum
+manifest beneath `shap-background/v1/` in the private evidence bucket. Do not
+make this bucket public. The application downloads the set once, validates
+every SHA-256 digest and caches the transformed tensor for subsequent SHAP
+requests. Use `--replace` only when intentionally recreating version `v1`;
+use a new versioned prefix for a changed research background distribution.
+
 Open the local URL printed in the terminal. Sign in with the **application
 username and application password you chose**, not the Supabase password.
 

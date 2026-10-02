@@ -27,8 +27,8 @@ def _single_panel(panel: dict, name: str, original_image, legend: str):
         return
     if panel.get('status') == 'error':
         st.error(f"{name} explanation is unavailable: {panel.get('error', 'Unknown error')}")
-        st.caption('For missing Python packages, stop the app and run: '
-                   'python -m pip install -r requirements-hosted.txt. Then restart the app.')
+        st.caption('Check the application logs for the specific cause. Missing dependencies, '
+                   'model files and private SHAP background data require different fixes.')
         return
 
     cols = st.columns(2)
