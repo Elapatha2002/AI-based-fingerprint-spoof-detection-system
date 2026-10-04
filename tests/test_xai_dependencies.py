@@ -9,6 +9,22 @@ from app.services import real_model
 
 
 class ExplainerDependencyTests(unittest.TestCase):
+    def test_all_registered_model_families_have_gradcam_target_layers(self):
+        from src.xai.base import get_target_layer
+
+        resnet_target = object()
+        mobile_target = object()
+        resnet = SimpleNamespace(layer4=[resnet_target])
+        mobile = SimpleNamespace(features=[mobile_target])
+
+        for name in ("resnet50", "resnet50_cbam", "fsd_cbam"):
+            with self.subTest(model=name):
+                self.assertIs(get_target_layer(resnet, name), resnet_target)
+        for name in ("mobilenetv3_large", "mobilenetv3_small",
+                     "mobilenet_fsd_cbam"):
+            with self.subTest(model=name):
+                self.assertIs(get_target_layer(mobile, name), mobile_target)
+
     def test_failed_panel_displays_error_not_numeric_metrics(self):
         from app.components import xai_views
         ui = Mock()

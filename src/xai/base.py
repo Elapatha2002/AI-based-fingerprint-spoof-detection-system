@@ -88,12 +88,16 @@ def get_target_layer(model: nn.Module, model_name: str) -> nn.Module:
     """
     Return the conv layer Grad-CAM++ should hook into.
 
-    For ResNet50 / ResNet50-CBAM:  last Bottleneck of layer4
-    For MobileNetV3:               last conv block in features
+    For ResNet50-family models:    last Bottleneck of layer4
+    For MobileNetV3-family models: last conv block in features
     """
-    if model_name.startswith("resnet50"):
+    resnet_family = {"resnet50", "resnet50_cbam", "fsd_cbam"}
+    mobilenet_family = {
+        "mobilenetv3_large", "mobilenetv3_small", "mobilenet_fsd_cbam",
+    }
+    if model_name in resnet_family:
         return model.layer4[-1]
-    if model_name.startswith("mobilenetv3"):
+    if model_name in mobilenet_family:
         return model.features[-1]
     raise ValueError(f"Unknown model name for target layer: {model_name!r}")
 
