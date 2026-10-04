@@ -824,12 +824,21 @@ div[data-testid="stMetricValue"] {
 /* Compact account action: keep a 44px target without stretching it across
    the full navigation column. */
 .st-key-nav_signout {
-  display: flex;
-  justify-content: flex-end;
+  display: flex !important;
+  justify-content: flex-end !important;
+  width: 100% !important;
+  margin-left: auto !important;
+}
+.st-key-nav_signout [data-testid="stButton"] {
+  display: flex !important;
+  justify-content: flex-end !important;
+  width: 100% !important;
+  margin-left: auto !important;
 }
 .st-key-nav_signout button {
   width: auto !important;
   min-width: 96px;
+  margin-left: auto !important;
   padding-inline: 18px !important;
 }
 
