@@ -5,6 +5,7 @@ docs/
 .claude/
 assets/figures/
 scripts/
+pilot_testing/
 # Secrets 
 .env
 .env.*

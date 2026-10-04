@@ -15,8 +15,8 @@ def render():
         _render_my_account()
         return
 
-    page_title("User management",
-               "Create, review, and manage access for forensic examiners.")
+    page_title("System Administration",
+               "Create, review, and manage access for forensic examiners and model configurations.")
 
     tab_users, tab_new, tab_model, tab_account = st.tabs(
         ["Users", "Add examiner", "Model configuration", "My account"]
