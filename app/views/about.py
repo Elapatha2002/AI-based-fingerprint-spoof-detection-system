@@ -191,20 +191,20 @@ def render():
             unsafe_allow_html=True,
         )
 
-        section_header("References")
-        st.markdown(
-            """
-            <div class='fsd-mono' style='font-size:12px;color:var(--text-muted);
-                 line-height:1.9;'>
-              [1] Mukul & Lal (2022). Fingerprint Liveness Detection Using CNN-Based Hybrid Model. <i>NeuroQuantology</i>.<br/>
-              [2] Chugh & Jain (2018). Fingerprint Spoof Detector Generalization. <i>IEEE TIFS</i>.<br/>
-              [3] Cheniti et al. (2025). Dual-Model Synergy for Fingerprint Spoof Detection. <i>J. Imaging</i>.<br/>
-              [4] Zhang et al. (2019). Slim-ResCNN. <i>IEEE Access</i>.<br/>
-              [5] Kothadiya et al. (2023). Enhancing Fingerprint Liveness Detection Accuracy. <i>J. Imaging</i>.<br/>
-              [6] Naeem et al. (2025). Revolutionizing Biometric Security. <i>IJAMRS</i>.<br/>
-              [7] Uliyan et al. (2020). Anti-spoofing method for fingerprint recognition. <i>JESTECH</i>.<br/>
-              [8] Agarwal & Bansal (2022). Fingerprint liveness detection through fusion of pores. <i>JKSU-CIS</i>.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        # section_header("References")
+        # st.markdown(
+        #     """
+        #     <div class='fsd-mono' style='font-size:12px;color:var(--text-muted);
+        #          line-height:1.9;'>
+        #       [1] Mukul & Lal (2022). Fingerprint Liveness Detection Using CNN-Based Hybrid Model. <i>NeuroQuantology</i>.<br/>
+        #       [2] Chugh & Jain (2018). Fingerprint Spoof Detector Generalization. <i>IEEE TIFS</i>.<br/>
+        #       [3] Cheniti et al. (2025). Dual-Model Synergy for Fingerprint Spoof Detection. <i>J. Imaging</i>.<br/>
+        #       [4] Zhang et al. (2019). Slim-ResCNN. <i>IEEE Access</i>.<br/>
+        #       [5] Kothadiya et al. (2023). Enhancing Fingerprint Liveness Detection Accuracy. <i>J. Imaging</i>.<br/>
+        #       [6] Naeem et al. (2025). Revolutionizing Biometric Security. <i>IJAMRS</i>.<br/>
+        #       [7] Uliyan et al. (2020). Anti-spoofing method for fingerprint recognition. <i>JESTECH</i>.<br/>
+        #       [8] Agarwal & Bansal (2022). Fingerprint liveness detection through fusion of pores. <i>JKSU-CIS</i>.
+        #     </div>
+        #     """,
+        #     unsafe_allow_html=True,
+        # )

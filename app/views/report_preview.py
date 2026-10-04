@@ -7,6 +7,7 @@ from components.cards import page_title, banner
 from components.case_strip import render_case_strip
 from components.audit import log_action, render_audit_drawer
 from utils.report_generator import build_report
+from app.services import email_delivery
 
 
 def render():
@@ -22,6 +23,13 @@ def render():
     meta = target["meta"]
     result = target["result"]
     xai = target["xai"]
+    report_key = (str(meta.get("case_id", "")), str(filename))
+    if st.session_state.get("rp_email_report_key") != report_key:
+        st.session_state["rp_email_report_key"] = report_key
+        st.session_state["rp_email_open"] = False
+        st.session_state["rp_email_nonce"] = st.session_state.get(
+            "rp_email_nonce", 0
+        ) + 1
 
     strip_meta = dict(meta)
     strip_meta.setdefault("timestamp",
@@ -125,10 +133,10 @@ def render():
                     if rid:
                         st.session_state[arch_key] = True
                         from app.services import storage
-                        target = ("local storage" if isinstance(
+                        archive_location = ("local storage" if isinstance(
                             storage.get_storage(), storage.LocalStorageService
                         ) else "cloud storage")
-                        st.toast(f"Report archived to {target} ({rid}).",
+                        st.toast(f"Report archived to {archive_location} ({rid}).",
                                  icon="☁")
                         log_action(
                             action="Archived report to storage + SQLite",
@@ -138,14 +146,64 @@ def render():
                 except Exception:
                     pass
     with a2:
-        if st.button("✉  Email (mock)", width="stretch",
+        if st.button("✉  Email PDF", width="stretch",
                      key="rp_email"):
-            st.toast("Email feature reserved for production deployment.",
-                     icon="ℹ")
+            st.session_state["rp_email_open"] = not st.session_state.get(
+                "rp_email_open", False
+            )
     with a3:
         if st.button("◀  Back", width="stretch", key="rp_back"):
+            st.session_state.pop("rp_email_open", None)
             st.session_state.current_page = "single_result"
             st.rerun()
+
+    if st.session_state.get("rp_email_open"):
+        if not email_delivery.email_is_configured():
+            st.warning(
+                "Email is not configured on this server. Ask the administrator "
+                "to set the SMTP options described in app/README.md."
+            )
+        else:
+            nonce = st.session_state.get("rp_email_nonce", 0)
+            with st.form(f"rp_email_form_{nonce}", clear_on_submit=False):
+                recipient = st.text_input(
+                    "Recipient email address", key=f"rp_email_recipient_{nonce}",
+                    placeholder="examiner@example.com",
+                )
+                confirmed = st.checkbox(
+                    "I have checked this recipient is authorised to receive this report.",
+                    key=f"rp_email_confirmed_{nonce}",
+                )
+                send_clicked = st.form_submit_button("Send PDF", type="primary")
+            if send_clicked:
+                if not confirmed:
+                    st.error("Confirm the recipient before sending the report.")
+                else:
+                    try:
+                        with st.spinner("Submitting email to the mail server..."):
+                            receipt = email_delivery.send_report(
+                                recipient=recipient,
+                                case_id=meta.get("case_id", ""),
+                                filename=filename,
+                                pdf_bytes=pdf_bytes,
+                            )
+                    except (ValueError, email_delivery.EmailDeliveryError) as error:
+                        st.error(str(error))
+                    else:
+                        log_action(
+                            action="Submitted report email",
+                            case_id=meta.get("case_id", "—"),
+                            details=(
+                                f"recipient={receipt.recipient}, "
+                                f"message_id={receipt.message_id}, "
+                                f"pdf_sha256={receipt.pdf_sha256}"
+                            ),
+                        )
+                        st.success(
+                            f"Mail server accepted the report for {receipt.recipient}."
+                        )
+                        st.session_state["rp_email_open"] = False
+                        st.session_state["rp_email_nonce"] = nonce + 1
 
     st.markdown("<div class='fsd-divider'></div>", unsafe_allow_html=True)
 

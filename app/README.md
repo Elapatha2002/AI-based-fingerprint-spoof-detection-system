@@ -9,6 +9,42 @@ From the project root, install `requirements-supabase.txt`, then run
 Settings provides examiner creation, editing, password reset, disabling and
 confirmed deletion. Do not share `.env.supabase` or enter credentials in chat.
 
+## Email PDF reports
+
+The **Email PDF** action on Report Preview sends the generated PDF as an
+attachment. It requires an SMTP account; the application does not use an
+examiner's personal password. Configure these server-side values:
+
+```text
+SMTP_HOST=mail.example.com
+SMTP_PORT=465
+SMTP_SECURITY=ssl
+SMTP_USERNAME=reports@example.com
+SMTP_PASSWORD=<your SMTP password>
+SMTP_FROM_EMAIL=reports@example.com
+```
+
+For local use, add them to the gitignored `.env.supabase` or `.env` file and
+restart Streamlit. On Streamlit Community Cloud, open the app's **Settings →
+Secrets** and add root-level TOML keys (without uploading `.env`):
+
+```toml
+SMTP_HOST = "mail.example.com"
+SMTP_PORT = "465"
+SMTP_SECURITY = "ssl"
+SMTP_USERNAME = "reports@example.com"
+SMTP_PASSWORD = "your-real-SMTP-password"
+SMTP_FROM_EMAIL = "reports@example.com"
+```
+
+Replace these examples with the outgoing-mail settings supplied by your
+mail provider. Never commit or share the real SMTP password.
+For a server that requires STARTTLS, set `SMTP_SECURITY=starttls` and its
+published SMTP port (usually 587). The recipient enters only their email
+address in the app and confirms it before sending. A successful SMTP
+submission is logged with the recipient, mail message ID, and PDF SHA-256.
+SMTP acceptance does not prove delivery to the recipient's inbox.
+
 Forensic-lab dark-mode Streamlit prototype for the **Explainable Fingerprint
 Spoof Detection System for Digital Forensics** project (BSc Hons Software
 Engineering — NSBM Green University).
