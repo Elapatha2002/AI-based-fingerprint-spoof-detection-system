@@ -4,6 +4,7 @@ numpy>=1.24.0
 pandas>=2.0.0
 matplotlib>=3.7.0
 fpdf2>=2.7.0
+pymupdf>=1.25,<2
 -r ../src/requirements.txt
 boto3>=1.36.0
 python-dotenv>=1.0.0

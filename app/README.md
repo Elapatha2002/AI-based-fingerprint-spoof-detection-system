@@ -242,7 +242,7 @@ Free tier supports CPU-only inference, which is fine for a demo.
 ## Known limitations of the prototype
 
 - Single-process Streamlit; not multi-user
-- History is in-session only (use SQLite later if needed)
-- PDF preview uses a base64-data iframe — works in Chrome/Edge, may be flaky in Firefox
+- Persisted history requires a working database and evidence-storage connection
+- PDF preview renders pages server-side with PyMuPDF; install the updated app requirements
 - Tables are read-only (use `st.data_editor` if you want inline editing)
 - Offline recovery mode deliberately skips sign-in but is bound to local host only

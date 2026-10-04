@@ -1,13 +1,22 @@
 """Screen 7 — Report Preview."""
 from datetime import datetime
+import logging
 import streamlit as st
-import base64
 
 from components.cards import page_title, banner
 from components.case_strip import render_case_strip
 from components.audit import log_action, render_audit_drawer
 from utils.report_generator import build_report
+from utils import pdf_preview
 from app.services import email_delivery
+
+
+logger = logging.getLogger(__name__)
+
+
+@st.cache_data(show_spinner=False, max_entries=12)
+def _render_pdf_page(pdf_bytes: bytes, page_index: int) -> bytes:
+    return pdf_preview.render_page_png(pdf_bytes, page_index)
 
 
 def render():
@@ -61,6 +70,12 @@ def render():
                                  image_bytes=target.get("image_bytes"),
                                  xai_panels=xai_panels)
 
+    try:
+        pages = pdf_preview.page_count(pdf_bytes)
+    except Exception:
+        logger.exception("Generated report could not be opened for preview")
+        pages = 0
+
     cols = st.columns([1, 2.5])
 
     with cols[0]:
@@ -68,31 +83,35 @@ def render():
             "<div class='fsd-section-h'>Report Pages</div>",
             unsafe_allow_html=True,
         )
-        for i, label in enumerate(
-                ["Page 1 — Header",
-                 "Page 2 — Image + Verdict",
-                 "Page 3 — XAI",
-                 "Page 4 — Method + Sigs"], start=1):
-            st.markdown(
-                f"<div class='fsd-card' style='padding:10px;font-size:12px;'>"
-                f"<b>Page {i}</b><br/>"
-                f"<span style='color:var(--text-muted)'>{label[8:]}</span></div>",
-                unsafe_allow_html=True,
+        page_names = ("Case information", "Image + verdict", "XAI", "Method + signatures")
+        if pages:
+            selected_page = st.radio(
+                "Report page",
+                options=range(pages),
+                format_func=lambda index: (
+                    f"Page {index + 1} · "
+                    f"{page_names[index] if index < len(page_names) else 'Continued'}"
+                ),
+                key="rp_selected_page",
             )
+        else:
+            selected_page = None
 
     with cols[1]:
         st.markdown(
             "<div class='fsd-section-h'>Preview</div>",
             unsafe_allow_html=True,
         )
-        b64 = base64.b64encode(pdf_bytes).decode()
-        st.markdown(
-            f"""<iframe src="data:application/pdf;base64,{b64}"
-                width="100%" height="600"
-                style="border:1px solid var(--border-subtle);
-                border-radius:8px;background:white;"></iframe>""",
-            unsafe_allow_html=True,
-        )
+        if selected_page is not None:
+            try:
+                preview_png = _render_pdf_page(pdf_bytes, selected_page)
+                st.image(preview_png, caption=f"Report page {selected_page + 1} of {pages}",
+                         width="stretch")
+            except Exception:
+                logger.exception("Could not render report page %s", selected_page + 1)
+                st.warning("This report page could not be previewed. You can still download the PDF below.")
+        else:
+            st.warning("The PDF could not be previewed. You can still download it below.")
 
     st.markdown("<div class='fsd-divider'></div>", unsafe_allow_html=True)
 

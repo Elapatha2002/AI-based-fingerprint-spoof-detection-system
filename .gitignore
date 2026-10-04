@@ -6,6 +6,7 @@ docs/
 assets/figures/
 scripts/
 pilot_testing/
+design/
 # Secrets 
 .env
 .env.*

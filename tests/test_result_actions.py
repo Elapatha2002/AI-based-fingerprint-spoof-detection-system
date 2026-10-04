@@ -92,6 +92,15 @@ class ResultActionsTests(unittest.TestCase):
         self.assertFalse(self.app.exception)
         self.assertEqual(len(db.list_analyses()), 1)
 
+    def test_storage_failure_identifies_the_failing_step_without_secret(self):
+        failure = persistence.PersistenceSaveError('image')
+        with patch.object(persistence, 'save_single_analysis', side_effect=failure):
+            self.app.button(key='sr_save').click().run()
+        self.assertFalse(self.app.exception)
+        self.assertIn('Evidence storage', self.app.error[0].value)
+        self.assertFalse(self.app.success)
+        self.assertFalse(self.app.button(key='sr_save').disabled)
+
     def test_changed_model_is_a_new_result(self):
         self.app.button(key='sr_save').click().run()
         self.app.session_state['result'] = {'label':'live', 'confidence':.8,

@@ -7,6 +7,7 @@ import sys
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from fpdf import FPDF
 
 from app.services import email_delivery
 
@@ -21,7 +22,16 @@ SMTP_ENV = {
     "SMTP_PASSWORD": "test-only-secret",
     "SMTP_FROM_EMAIL": "reports@example.com",
 }
-PDF = b"%PDF-1.7\nfixture report"
+
+def _fixture_pdf():
+    document = FPDF()
+    document.add_page()
+    document.set_font("Helvetica", size=12)
+    document.cell(0, 10, "Fixture report")
+    return bytes(document.output())
+
+
+PDF = _fixture_pdf()
 
 
 class ReportEmailTests(unittest.TestCase):

@@ -12,9 +12,8 @@ Design notes:
   • A "case" is created lazily the first time an analysis with a new
     case_id is saved. The examiner value from the analysis form becomes
     the case examiner.
-  • Failures are logged and swallowed — persistence is best-effort so
-    the user's demo does not break if S3 has a hiccup. The in-session
-    history remains authoritative for the current session.
+  • Batch persistence remains best-effort. An explicit single-result save
+    can also raise a sanitized, stage-specific error for the UI.
   • Image bytes are only uploaded to S3 on explicit save (single result)
     or on batch completion. Not on every quick classification.
 """
@@ -30,6 +29,21 @@ from PIL import Image
 from app.services import database, storage
 
 logger = logging.getLogger(__name__)
+
+
+class PersistenceSaveError(RuntimeError):
+    """A save failure with a safe, user-facing stage (never a secret URL)."""
+
+    MESSAGES = {
+        "validation": "The fingerprint image is missing. Capture or upload it again.",
+        "case": "The database could not create or load the case.",
+        "image": "Evidence storage could not upload the fingerprint image.",
+        "analysis": "The database could not record the analysis.",
+    }
+
+    def __init__(self, stage: str):
+        self.stage = stage
+        super().__init__(self.MESSAGES.get(stage, "The case record could not be saved."))
 
 
 # ── Case bootstrap ────────────────────────────────────────────────────
@@ -57,8 +71,12 @@ def _ensure_case(case_id: str, examiner: str, description: str = "") -> str:
                 "VALUES (?, ?, ?, ?, 'open', ?, ?)",
                 (case_id, case_id, examiner, description, now, now),
             )
-    except Exception as e:
-        logger.warning(f"Could not create case {case_id}: {e}")
+    except Exception:
+        # A concurrent request may have inserted this case after our first
+        # read. Only ignore that race; never pretend a failed insert succeeded.
+        if database.get_case(case_id):
+            return case_id
+        raise
     return case_id
 
 
@@ -78,26 +96,33 @@ def _guess_extension(filename: str) -> str:
 
 def save_single_analysis(*, filename: str, image_bytes: bytes,
                          meta: dict, result: dict,
-                         xai_panels: Optional[dict] = None) -> Optional[str]:
+                         xai_panels: Optional[dict] = None,
+                         raise_on_error: bool = False) -> Optional[str]:
     """Persist one image + one classification result + its XAI heatmaps.
 
-    Returns the analysis_id on success, None on any failure.
-    Persistence is best-effort — if storage or the DB is down, the caller's
-    session-state save still succeeds and the user sees no error.
+    Returns the analysis_id on success. By default returns None on failure;
+    an explicit UI save passes raise_on_error=True for actionable feedback.
     """
     case_id = meta.get("case_id") or "CASE-UNKNOWN"
     examiner = (meta.get("examiner") or "").strip()
 
+    stage = "validation"
     try:
+        if not image_bytes:
+            raise ValueError("No fingerprint image bytes were supplied")
+
+        stage = "case"
         _ensure_case(case_id, examiner)
 
         # 1. Upload the fingerprint image to the selected storage backend.
+        stage = "image"
         ext = _guess_extension(filename)
         analysis_id_seed = f"AN-{_sha256(image_bytes)[:16]}"
         image_key = storage.upload_key(case_id, analysis_id_seed, ext)
         storage.get_storage().upload_bytes(image_key, image_bytes)
 
-        # 2. Record analysis in SQLite
+        # 2. Record analysis in the selected database.
+        stage = "analysis"
         analysis_id = database.record_analysis(
             case_id=case_id,
             image_filename=filename,
@@ -133,8 +158,13 @@ def save_single_analysis(*, filename: str, image_bytes: bytes,
 
         return analysis_id
 
-    except Exception as e:
-        logger.error(f"save_single_analysis failed for {filename}: {e}")
+    except Exception as exc:
+        # Backend exception strings can contain connection details. Log only
+        # the stage and exception class; the UI gets the same safe stage.
+        logger.error("save_single_analysis failed at %s stage (%s)",
+                     stage, type(exc).__name__)
+        if raise_on_error:
+            raise PersistenceSaveError(stage) from exc
         return None
 
 

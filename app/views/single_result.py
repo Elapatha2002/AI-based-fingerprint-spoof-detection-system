@@ -303,14 +303,20 @@ def _render_result_actions(filename, image_bytes, meta, result, xai_panels):
         if st.button('Saved' if analysis_id else 'Save case record', width="stretch",
                      key="sr_save", disabled=bool(analysis_id)) and not analysis_id:
             from app.services import persistence
-            with st.spinner('Saving case record...'):
-                analysis_id = persistence.save_single_analysis(
-                    filename=filename,
-                    image_bytes=image_bytes or b"",
-                    meta=meta,
-                    result=result,
-                    xai_panels=xai_panels,
-                )
+            save_error = None
+            try:
+                with st.spinner('Saving case record...'):
+                    analysis_id = persistence.save_single_analysis(
+                        filename=filename,
+                        image_bytes=image_bytes or b"",
+                        meta=meta,
+                        result=result,
+                        xai_panels=xai_panels,
+                        raise_on_error=True,
+                    )
+            except persistence.PersistenceSaveError as exc:
+                analysis_id = None
+                save_error = exc
             if analysis_id:
                 # Record completion before displaying a transient notification.
                 saved[save_key] = analysis_id
@@ -329,7 +335,10 @@ def _render_result_actions(filename, image_bytes, meta, result, xai_panels):
                 )
                 st.toast('Case record saved.', icon='✅')
             else:
-                st.error('Case record was not saved. Check the database and storage connection, '
-                         'then try again. Keep this page open to retain the current image.')
+                reason = str(save_error) if save_error else (
+                    'Check the database and storage connection, then try again.'
+                )
+                st.error(f'Case record was not saved. {reason} '
+                         'Keep this page open to retain the current image.')
     if analysis_id:
         st.success(f'Case record saved. Reference: {analysis_id}')
